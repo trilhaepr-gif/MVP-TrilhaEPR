@@ -17,7 +17,7 @@ import re
 # ==========================================
 # 1. CONFIGURAÇÃO DA PÁGINA
 # ==========================================
-st.set_page_config(page_title="SAD - Engenharia de Produção", page_icon="🎒", layout="wide")
+st.set_page_config(page_title="TrilhaEPR - SAD - Engenharia de Produção", page_icon="🎒", layout="wide")
 st.title("🎒 Sistema de Apoio à Decisão: Otimização de Matrícula")
 st.markdown("Encontre as melhores disciplinas optativas baseadas no seu perfil e disponibilidade de tempo, utilizando Inteligência Artificial.")
 
