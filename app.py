@@ -23,7 +23,7 @@ modelo_ia = carregar_ia()
 @st.cache_data
 def carregar_base():
     # Carrega o seu novo "Super CSV" unificado
-    df = pd.read_csv('base_disciplinas_2026.csv')
+    df = pd.read_csv('disciplinas.csv')
     df.fillna('', inplace=True)
     
     # Padroniza créditos como número
