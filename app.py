@@ -22,20 +22,31 @@ modelo_ia = carregar_ia()
 
 @st.cache_data
 def carregar_base():
-    # Carrega o seu novo "Super CSV" unificado
+    # 1. Carrega o CSV
     df = pd.read_csv('disciplinas.csv')
     
-    # 1. Tratamos as colunas de TEXTO (Nome, Ementa, Horario, Pre_Requisitos)
-    # Selecionamos apenas colunas do tipo 'object' (strings) para preencher com ''
+    # 2. Limpeza básica de strings e preenchimento de vazios
+    df['Codigo'] = df['Codigo'].str.strip().str.upper()
     colunas_texto = df.select_dtypes(include=['object']).columns
     df[colunas_texto] = df[colunas_texto].fillna('')
+
+    # 3. TRATAMENTO DE DUPLICATAS (A solução do erro)
+    # Agrupamos pelo Código e definimos como lidar com cada coluna
+    df = df.groupby('Codigo').agg({
+        'Nome': 'first',
+        'Tipo': 'first',
+        'Pre_Requisitos': 'first',
+        'Correquisitos': 'first',
+        'Equivalencias': 'first',
+        'Horario': lambda x: ', '.join(set(filter(None, x.astype(str)))), # Une horários diferentes
+        'Credito': 'max', # Mantém a maior carga horária encontrada
+        'Ementa': 'first'
+    }).reset_index()
+
+    # 4. Garante que os créditos sejam inteiros
+    df['Credito'] = pd.to_numeric(df['Credito'], errors='coerce').fillna(0).astype(int)
     
-    # 2. Tratamos a coluna numérica (Credito)
-    # Se houver erro ou vazio, preenchemos com 0 (número), não com texto
-    if 'Credito' in df.columns:
-        df['Credito'] = pd.to_numeric(df['Credito'], errors='coerce').fillna(0).astype(int)
-    
-    # 3. Vetoriza apenas as OPTATIVAS para a IA de Carreira
+    # 5. Vetorização para a IA (Apenas Optativas)
     def gerar_vetor(row):
         if row['Tipo'] == 'OPT' and len(str(row['Ementa'])) > 10:
             return modelo_ia.encode(str(row['Ementa']))
