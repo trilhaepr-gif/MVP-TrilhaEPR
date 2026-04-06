@@ -4,49 +4,43 @@ from sentence_transformers import SentenceTransformer, util
 import re
 
 # ==========================================
-# 1. CONFIGURAÇÃO DA PÁGINA
+# 1. CONFIGURAÇÃO E IA (Cache)
 # ==========================================
 st.set_page_config(page_title="SAD V4 - Eng. Produção UnB", page_icon="🚀", layout="wide")
-st.title("🎒 Sistema de Apoio à Decisão (SAD) - V4")
-st.markdown("Planejamento de matrícula otimizado para o perfil noturno e trilhas de carreira.")
 
-# ==========================================
-# 2. CARREGAMENTO DA IA E DADOS (Cache)
-# ==========================================
 @st.cache_resource
 def carregar_ia():
-    # Modelo leve e multilingue para entender as ementas
     return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
 modelo_ia = carregar_ia()
 
 @st.cache_data
 def carregar_base():
-    # 1. Carrega o CSV
+    # Carrega a base consolidada
     df = pd.read_csv('disciplinas.csv')
     
-    # 2. Limpeza básica de strings e preenchimento de vazios
-    df['Codigo'] = df['Codigo'].str.strip().str.upper()
-    colunas_texto = df.select_dtypes(include=['object']).columns
-    df[colunas_texto] = df[colunas_texto].fillna('')
-
-    # 3. TRATAMENTO DE DUPLICATAS (A solução do erro)
-    # Agrupamos pelo Código e definimos como lidar com cada coluna
+    # 1. Limpeza de espaços e padronização para maiúsculas
+    df['Codigo'] = df['Codigo'].astype(str).str.strip().str.upper()
+    
+    # 2. TRATAMENTO DE DUPLICATAS: Garante que cada Código seja único
+    # Agrupa e resolve conflitos: une horários e pega o maior crédito
     df = df.groupby('Codigo').agg({
         'Nome': 'first',
         'Tipo': 'first',
         'Pre_Requisitos': 'first',
         'Correquisitos': 'first',
         'Equivalencias': 'first',
-        'Horario': lambda x: ', '.join(set(filter(None, x.astype(str)))), # Une horários diferentes
-        'Credito': 'max', # Mantém a maior carga horária encontrada
+        'Horario': lambda x: ', '.join(set(filter(None, x.astype(str).str.replace('nan', '')))),
+        'Credito': 'max',
         'Ementa': 'first'
     }).reset_index()
 
-    # 4. Garante que os créditos sejam inteiros
+    # 3. Tratamento de tipos e preenchimento de vazios
     df['Credito'] = pd.to_numeric(df['Credito'], errors='coerce').fillna(0).astype(int)
+    colunas_texto = ['Nome', 'Tipo', 'Pre_Requisitos', 'Correquisitos', 'Equivalencias', 'Horario', 'Ementa']
+    df[colunas_texto] = df[colunas_texto].fillna('')
     
-    # 5. Vetorização para a IA (Apenas Optativas)
+    # 4. Vetorização para IA de Carreira (Apenas Optativas)
     def gerar_vetor(row):
         if row['Tipo'] == 'OPT' and len(str(row['Ementa'])) > 10:
             return modelo_ia.encode(str(row['Ementa']))
@@ -54,8 +48,9 @@ def carregar_base():
         
     df['Vetor_Ementa'] = df.apply(gerar_vetor, axis=1)
     return df
+
 # ==========================================
-# 3. CLASSE DO MOTOR DE CÁLCULO
+# 2. MOTOR DE LOGICA CURRICULAR
 # ==========================================
 class MotorSAD:
     def __init__(self, df):
@@ -63,9 +58,7 @@ class MotorSAD:
         self.disciplinas = self.df.set_index('Codigo').to_dict('index')
 
     def extrair_slots(self, horario):
-        """Converte códigos SIGAA em slots de tempo (dia, turno, hora)."""
-        if not horario or horario == 'Não Ofertada':
-            return []
+        if not horario or 'Não Ofertada' in horario: return []
         slots = []
         for h_turma in str(horario).split(','):
             match = re.search(r'([2-7]+)([MTN])([1-7]+)', h_turma.strip())
@@ -77,105 +70,84 @@ class MotorSAD:
         return slots
 
     def checar_requisitos(self, expressao, historico):
-        """Avalia se o aluno pode cursar a matéria (Lógica Booleana)."""
-        if not expressao or expressao == '':
-            return True
+        if not expressao or expressao.strip() == '': return True
         exp = str(expressao).replace(',', ' E ').replace('OU', ' or ').replace('E', ' and ')
         codigos = set(re.findall(r'[A-Z]{3}\d{4}', exp))
         for cod in codigos:
-            # Checa presença no histórico (ou equivalentes no futuro)
-            status = cod in historico
-            exp = re.sub(rf'\b{cod}\b', str(status), exp)
-        try:
-            return eval(exp)
-        except:
-            return False
+            # Considera cumprido se estiver no histórico
+            exp = re.sub(rf'\b{cod}\b', str(cod in historico), exp)
+        try: return eval(exp)
+        except: return False
 
-    def calcular_prioridade(self, codigo, objetivo_vetor):
-        """Calcula o Score Final: IA (40%) + Noite (30%) + Caminho Crítico (30%)"""
+    def calcular_score(self, codigo, objetivo_vetor):
         dados = self.disciplinas[codigo]
         score = 0
-        
-        # 1. Match de Carreira (IA)
+        # Peso Carreira (IA)
         if dados['Vetor_Ementa'] is not None:
             sim = util.cos_sim(objetivo_vetor, dados['Vetor_Ementa']).item()
-            score += max(0, sim * 40)
-            
-        # 2. Preferência Noturna
-        if 'N' in str(dados['Horario']):
-            score += 30
-            
-        # 3. Caminho Crítico (Obrigatórias têm peso base maior)
-        if dados['Tipo'] == 'OBRIG':
-            score += 30
-            
-        return round(score, 1)
+            score += (sim * 40)
+        # Peso Noturno
+        if 'N' in str(dados['Horario']): score += 30
+        # Peso Obrigatória (Caminho Crítico)
+        if dados['Tipo'] == 'OBRIG': score += 30
+        return round(max(0, score), 1)
 
 # ==========================================
-# 4. INTERFACE E LÓGICA PRINCIPAL
+# 3. INTERFACE STREAMLIT
 # ==========================================
+st.title("🎒 SAD Engenharia de Produção - V4")
+st.markdown("Otimização de grade horária baseada em histórico real e preferência noturna.")
+
 df_base = carregar_base()
 motor = MotorSAD(df_base)
 
-# Definições de áreas para a IA
 descricoes_areas = {
-    "Eng. de Operações": "Sistemas de produção, manufatura e PCP.",
-    "Logística": "Cadeia de suprimentos, transporte e estoque.",
-    "Dados e Pesquisa Operacional": "Otimização, modelos matemáticos e estatística.",
-    "Gestão e Projetos": "Estratégia, sistemas de informação e projetos."
+    "Eng. de Operações": "Sistemas de produção, manufatura, controle de processos e PCP.",
+    "Logística": "Cadeia de suprimentos, transporte, estoques e modais.",
+    "Pesquisa Operacional/Dados": "Modelagem matemática, otimização e análise de dados.",
+    "Gestão e Economia": "Finanças, viabilidade econômica e gestão de projetos."
 }
 
 # SIDEBAR
-st.sidebar.header("👤 Seu Perfil")
-historico_input = st.sidebar.text_area("Insira os códigos das matérias concluídas (separados por vírgula):", 
-                                      help="Ex: MAT0025, EPR0056, IFD0171")
-historico = [c.strip().upper() for c in historico_input.split(',') if c.strip()]
+st.sidebar.header("👤 Histórico e Preferências")
+historico_raw = st.sidebar.text_area("Códigos das matérias feitas (separados por vírgula):", placeholder="Ex: MAT0025, EPR0056")
+historico = [c.strip().upper() for c in historico_raw.split(',') if c.strip()]
 
-st.sidebar.divider()
-st.sidebar.header("🎯 Preferências")
 trilha = st.sidebar.selectbox("Trilha de Carreira:", list(descricoes_areas.keys()))
-carga_max = st.sidebar.slider("Carga Horária Máxima (h):", 60, 420, 240, 30)
+carga_max = st.sidebar.slider("Limite de Horas Semestral:", 60, 420, 240, 30)
 
-if st.sidebar.button("🚀 Otimizar Minha Grade", type="primary"):
-    vetor_objetivo = modelo_ia.encode(descricoes_areas[trilha])
+if st.sidebar.button("🚀 Otimizar Matrícula", type="primary"):
+    vetor_foco = modelo_ia.encode(descricoes_areas[trilha])
     
-    # FILTRAGEM: O que é possível cursar?
+    # 1. Filtro de Possibilidades
     possiveis = []
     for cod, dados in motor.disciplinas.items():
         if cod not in historico:
             if motor.checar_requisitos(dados['Pre_Requisitos'], historico):
-                if dados['Horario'] != 'Não Ofertada':
-                    score = motor.calcular_prioridade(cod, vetor_objetivo)
+                if dados['Horario'] and 'Não Ofertada' not in dados['Horario']:
+                    score = motor.calcular_score(cod, vetor_foco)
                     possiveis.append({'Codigo': cod, 'Score': score, 'Dados': dados})
     
-    # ORDENAÇÃO POR SCORE
+    # 2. Ordenação por Score (IA + Noite + Obrigatória)
     possiveis = sorted(possiveis, key=lambda x: x['Score'], reverse=True)
     
-    # MONTAGEM DA GRADE (Mochila + Conflitos)
-    grade_final = []
-    slots_ocupados = []
-    horas_totais = 0
-    
+    # 3. Mochila com Conflito de Horário
+    grade, slots, total_h = [], [], 0
     for item in possiveis:
-        h = item['Dados']['Horario']
         c = item['Dados']['Credito']
-        
-        if horas_totais + c <= carga_max:
-            if not any(slot in slots_ocupados for slot in motor.extrair_slots(h)):
-                grade_final.append(item)
-                slots_ocupados.extend(motor.extrair_slots(h))
-                horas_totais += c
+        if total_h + c <= carga_max:
+            slots_materia = motor.extrair_slots(item['Dados']['Horario'])
+            if not any(s in slots for s in slots_materia):
+                grade.append(item)
+                slots.extend(slots_materia)
+                total_h += c
                 
-    # EXIBIÇÃO DOS RESULTADOS
-    if not grade_final:
-        st.warning("Não foi possível encontrar matérias que atendam aos requisitos e restrições de horário.")
+    # 4. Resultados
+    if not grade:
+        st.warning("Nenhuma disciplina encontrada para os critérios selecionados.")
     else:
-        st.subheader(f"✅ Sugestão de Grade Otimizada ({horas_totais}h / {carga_max}h)")
-        
-        for item in grade_final:
-            with st.expander(f"**{item['Codigo']} - {item['Dados']['Nome']}** (Score: {item['Score']})"):
-                col_a, col_b = st.columns(2)
-                col_a.write(f"🕒 **Horário:** {item['Dados']['Horario']}")
-                col_a.write(f"📚 **Tipo:** {item['Dados']['Tipo']}")
-                col_b.write(f"⚖️ **Créditos:** {item['Dados']['Credito']}h")
-                st.write(f"📖 **Ementa:** {item['Dados']['Ementa']}")
+        st.subheader(f"📊 Sugestão de Matrícula ({total_h}h Sugeridas)")
+        for m in grade:
+            with st.expander(f"**{m['Codigo']} - {m['Dados']['Nome']}** (Score: {m['Score']})"):
+                st.write(f"🕒 **Horário:** {m['Dados']['Horario']} | ⚖️ **Carga:** {m['Dados']['Credito']}h")
+                st.write(f"📖 **Ementa:** {m['Dados']['Ementa']}")
