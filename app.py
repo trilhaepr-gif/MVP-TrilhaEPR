@@ -63,7 +63,7 @@ class MotorSAD:
 @st.cache_data
 def carregar_base():
     # O arquivo que consolidamos com Horarios e Créditos limpos
-    df = pd.read_csv('Disciplinas_EPR - Página1.csv')
+    df = pd.read_csv('base_disciplinas_2026.csv')
     # Vetorização apenas para Optativas (IA de Carreira)
     def vetorizar(row):
         if row['Tipo'] == 'OPT' and len(str(row['Ementa'])) > 10:
