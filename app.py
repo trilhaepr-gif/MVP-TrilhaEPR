@@ -24,12 +24,18 @@ modelo_ia = carregar_ia()
 def carregar_base():
     # Carrega o seu novo "Super CSV" unificado
     df = pd.read_csv('disciplinas.csv')
-    df.fillna('', inplace=True)
     
-    # Padroniza créditos como número
-    df['Credito'] = pd.to_numeric(df['Credito'], errors='coerce').fillna(0).astype(int)
+    # 1. Tratamos as colunas de TEXTO (Nome, Ementa, Horario, Pre_Requisitos)
+    # Selecionamos apenas colunas do tipo 'object' (strings) para preencher com ''
+    colunas_texto = df.select_dtypes(include=['object']).columns
+    df[colunas_texto] = df[colunas_texto].fillna('')
     
-    # Vetoriza apenas as OPTATIVAS para economizar memória e tempo
+    # 2. Tratamos a coluna numérica (Credito)
+    # Se houver erro ou vazio, preenchemos com 0 (número), não com texto
+    if 'Credito' in df.columns:
+        df['Credito'] = pd.to_numeric(df['Credito'], errors='coerce').fillna(0).astype(int)
+    
+    # 3. Vetoriza apenas as OPTATIVAS para a IA de Carreira
     def gerar_vetor(row):
         if row['Tipo'] == 'OPT' and len(str(row['Ementa'])) > 10:
             return modelo_ia.encode(str(row['Ementa']))
@@ -37,7 +43,6 @@ def carregar_base():
         
     df['Vetor_Ementa'] = df.apply(gerar_vetor, axis=1)
     return df
-
 # ==========================================
 # 3. CLASSE DO MOTOR DE CÁLCULO
 # ==========================================
