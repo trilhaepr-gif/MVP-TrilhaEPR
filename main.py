@@ -2,9 +2,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
+import requests
+import os
 import re
 import math
+
+def cos_sim(a, b):
+    if not a or not b: return 0.0
+    dot = sum(x*y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x*x for x in a))
+    norm_b = math.sqrt(sum(y*y for y in b))
+    if norm_a == 0 or norm_b == 0: return 0.0
+    return dot / (norm_a * norm_b)
 
 app = FastAPI(title="SAD Engenharia de Produção API - V7 Final")
 
@@ -22,8 +31,23 @@ app.add_middleware(
 # ==========================================
 # 1. CARREGAMENTO E VETORIZAÇÃO (Cérebro)
 # ==========================================
-print("Carregando IA e Banco de Dados...")
-modelo_ia = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+print("Carregando IA via Hugging Face e Banco de Dados...")
+HF_TOKEN = os.getenv("HF_TOKEN")
+API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L12-v2"
+
+def gerar_embeddings_hf(textos):
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    payload = {
+        "inputs": textos,
+        "options": {"wait_for_model": True}
+    }
+    resposta = requests.post(API_URL, headers=headers, json=payload)
+    
+    if resposta.status_code == 200:
+        return resposta.json()
+    else:
+        print(f"Erro na API Hugging Face: {resposta.text}")
+        return [[0.0] * 384 for _ in range(len(textos))]
 
 def carregar_base():
     try:
@@ -75,12 +99,34 @@ def carregar_base():
 
     df['texto_nlp'] = df.apply(preparar_texto_para_nlp, axis=1)
 
-    def gerar_vetor(row):
-        txt = str(row['texto_nlp'])
-        if len(txt) > 10: return modelo_ia.encode(txt)
-        return None
-
-    df['Vetor_Ementa'] = df.apply(gerar_vetor, axis=1)
+    # Usando a API Hugging Face em lotes (batch) para eficiência
+    vetores_finais = []
+    textos_validos = []
+    
+    for txt in df['texto_nlp']:
+        texto_str = str(txt)
+        textos_validos.append(texto_str if len(texto_str) > 10 else None)
+        
+    para_processar = [t for t in textos_validos if t is not None]
+    print(f"Enviando {len(para_processar)} ementas para a Hugging Face API...")
+    
+    resultados = []
+    if para_processar:
+        for i in range(0, len(para_processar), 50):
+            lote = para_processar[i:i+50]
+            res_lote = gerar_embeddings_hf(lote)
+            resultados.extend(res_lote)
+            print(f"Processado batch: {min(i+50, len(para_processar))}/{len(para_processar)}")
+            
+    idx_res = 0
+    for txt in textos_validos:
+        if txt is not None and idx_res < len(resultados):
+            vetores_finais.append(resultados[idx_res])
+            idx_res += 1
+        else:
+            vetores_finais.append(None)
+            
+    df['Vetor_Ementa'] = vetores_finais
     return df
 
 df_base = carregar_base()
@@ -217,7 +263,8 @@ descricoes_areas = {
 
 @app.post("/otimizar")
 def otimizar(req: RequisicaoGrade):
-    vetor_foco = modelo_ia.encode(descricoes_areas.get(req.trilha, descricoes_areas["Explorar"]))
+    texto_foco = descricoes_areas.get(req.trilha, descricoes_areas["Explorar"])
+    vetor_foco = gerar_embeddings_hf([texto_foco])[0]
     hist_clean = [str(h).strip().upper() for h in req.historico]
     
     # Normaliza planejadas: aceita dicts {codigo, turma} ou strings puras
@@ -283,7 +330,7 @@ def otimizar(req: RequisicaoGrade):
 
         match_ia = 0
         if dados.get('Vetor_Ementa') is not None and vetor_foco is not None:
-            sim = util.cos_sim(vetor_foco, dados['Vetor_Ementa']).item()
+            sim = cos_sim(vetor_foco, dados['Vetor_Ementa'])
             if not math.isnan(sim): match_ia = min(100, max(0, int(sim * 100)))
 
         possiveis.append({
