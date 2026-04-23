@@ -33,7 +33,7 @@ app.add_middleware(
 # ==========================================
 print("Carregando IA via Hugging Face e Banco de Dados...")
 HF_TOKEN = os.getenv("HF_TOKEN")
-API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L12-v2"
+API_URL = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L12-v2"
 
 def gerar_embeddings_hf(textos):
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
