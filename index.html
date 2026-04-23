@@ -1942,7 +1942,7 @@
             document.querySelectorAll('.card-trilha').forEach(btn => btn.style.pointerEvents = 'none');
 
             try {
-                const res = await fetch('http://127.0.0.1:8000/otimizar', {
+                const res = await fetch('https://trilha-epr-api.onrender.com/otimizar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ historico: hist, planejadas: plan, carga_maxima: carga, trilha: trilhaSelecionadaGlobal })
