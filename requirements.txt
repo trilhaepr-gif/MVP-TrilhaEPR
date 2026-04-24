@@ -2,4 +2,4 @@ fastapi
 uvicorn
 pandas
 pydantic
-requests
+huggingface_hub
