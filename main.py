@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
-import requests
+from huggingface_hub import InferenceClient
 import os
 import re
 import math
@@ -33,20 +33,27 @@ app.add_middleware(
 # ==========================================
 print("Carregando IA via Hugging Face e Banco de Dados...")
 HF_TOKEN = os.getenv("HF_TOKEN")
-API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L12-v2"
+# Removemos requests e instanciamos o cliente oficial (que trata as rotas sozinho)
+try:
+    hf_client = InferenceClient(token=HF_TOKEN.replace('"', '').strip() if HF_TOKEN else None)
+except Exception as e:
+    print(f"Erro ao instanciar HF Client: {e}")
+    hf_client = None
 
 def gerar_embeddings_hf(textos):
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    payload = {
-        "inputs": textos,
-        "options": {"wait_for_model": True}
-    }
-    resposta = requests.post(API_URL, headers=headers, json=payload)
+    if not hf_client:
+        return [[0.0] * 384 for _ in range(len(textos))]
     
-    if resposta.status_code == 200:
-        return resposta.json()
-    else:
-        print(f"Erro na API Hugging Face: {resposta.text}")
+    try:
+        # A própria biblioteca sabe que url chamar para o modelo selecionado
+        resposta = hf_client.feature_extraction(
+            text=textos, 
+            model="sentence-transformers/all-MiniLM-L12-v2"
+        )
+        # Converte o array retornado para o formato lista de listas
+        return resposta.tolist() if hasattr(resposta, 'tolist') else resposta
+    except Exception as e:
+        print(f"Erro na API Hugging Face (SDK): {e}")
         return [[0.0] * 384 for _ in range(len(textos))]
 
 def carregar_base():
