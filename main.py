@@ -19,7 +19,7 @@ app = FastAPI(title="SAD Engenharia de Produção API - V7 Final")
 
 # Configuração de CORS para permitir que qualquer site acesse a API
 # Num ambiente real de produção empresarial, você limitaria isto ao domínio do seu GitHub Pages.
-# Mas para o MVP, vamos deixar aberto para facilitar..
+# Mas para o MVP, vamos deixar aberto para facilitar.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Permite todas as origens
