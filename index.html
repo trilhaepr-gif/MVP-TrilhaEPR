@@ -702,7 +702,8 @@
 
         .card-codigo {
             font-size: 0.65rem;
-            color: rgba(255, 255, 255, 0.75);
+            color: inherit;
+            opacity: 0.85;
             font-family: monospace;
             font-weight: 600;
             letter-spacing: 0.5px;
@@ -717,7 +718,7 @@
             margin-top: 4px;
             pointer-events: none;
             z-index: 2;
-            color: #fff;
+            color: inherit;
         }
 
         .ch-badge {
@@ -725,8 +726,8 @@
             bottom: 6px;
             left: 8px;
             font-size: 0.6rem;
-            opacity: 0.7;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            opacity: 0.85;
+            border: 1px solid currentColor;
             border-radius: 4px;
             padding: 2px 4px;
             pointer-events: none;
@@ -1151,12 +1152,10 @@
 
         .prodbas {
             background-color: var(--cor-producao-bas);
-            color: #fff;
         }
 
         .prodesp {
             background-color: var(--cor-producao-esp);
-            color: #fff;
         }
 
         .humanas {
@@ -1302,30 +1301,24 @@
             transform: scale(1.05);
         }
 
-        /* Quando a grade entra em modo de análise (Hover ativado) */
-        .grade-container-highlight .card,
-        .grade-container-highlight .optativa-card {
-            opacity: 0.3;
-            transition: opacity 0.3s ease, transform 0.2s ease, filter 0.3s ease;
-            filter: grayscale(0.5);
-        }
-
-        /* A matéria onde o mouse está e todas as matérias que ela destranca */
-        .grade-container-highlight .card.efeito-domino-ativo,
-        .grade-container-highlight .optativa-card.efeito-domino-ativo {
+        .efeito-domino { 
+            border-color: #ffeb3b !important; 
+            box-shadow: 0 0 15px rgba(255, 235, 59, 0.7) !important; 
+            transform: scale(1.03); 
+            filter: brightness(1.2); 
+            z-index: 10; 
             opacity: 1 !important;
-            filter: grayscale(0) brightness(1.1) !important;
-            transform: scale(1.03);
-            z-index: 10;
-            box-shadow: 0 0 15px rgba(255, 235, 59, 0.7);
-            border-color: #ffeb3b !important;
+            color: #111 !important;
         }
 
-        /* Estilo para a matéria RAIZ */
-        .grade-container-highlight .card.efeito-domino-raiz,
-        .grade-container-highlight .optativa-card.efeito-domino-raiz {
-            box-shadow: 0 0 20px rgba(0, 230, 118, 0.9);
-            border-color: #00e676 !important;
+        .efeito-domino-raiz { 
+            box-shadow: 0 0 20px rgba(0, 230, 118, 0.9) !important; 
+            border-color: #00e676 !important; 
+            transform: scale(1.03); 
+            filter: brightness(1.2); 
+            z-index: 10; 
+            opacity: 1 !important;
+            color: #111 !important;
         }
     </style>
 </head>
@@ -1771,11 +1764,8 @@
         function iluminarDominó(idBase) {
             const dependentes = getDependentesFuturos(idBase);
             
-            document.body.classList.add('grade-container-highlight');
-            
             const cardRaiz = document.getElementById(idBase);
             if (cardRaiz) {
-                cardRaiz.classList.add('efeito-domino-ativo');
                 cardRaiz.classList.add('efeito-domino-raiz');
             }
 
@@ -1783,18 +1773,15 @@
                 dependentes.forEach(depId => {
                     const el = document.getElementById(depId);
                     if (el) {
-                        el.classList.add('efeito-domino-ativo');
+                        el.classList.add('efeito-domino');
                     }
                 });
             }
         }
 
         function apagarDominó() {
-            document.body.classList.remove('grade-container-highlight');
-            
-            document.querySelectorAll('.efeito-domino-ativo').forEach(el => {
-                el.classList.remove('efeito-domino-ativo');
-                el.classList.remove('efeito-domino-raiz');
+            document.querySelectorAll('.efeito-domino, .efeito-domino-raiz').forEach(el => {
+                el.classList.remove('efeito-domino', 'efeito-domino-raiz');
             });
         }
 
@@ -2042,7 +2029,7 @@
             document.querySelectorAll('.card-trilha').forEach(btn => btn.style.pointerEvents = 'none');
 
             try {
-                const res = await fetch('https://trilha-epr-api.onrender.com/otimizar', {
+                const res = await fetch('https://trilhaepr-api.onrender.com/otimizar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ historico: hist, planejadas: plan, carga_maxima: carga, trilha: trilhaSelecionadaGlobal })
