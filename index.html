@@ -603,17 +603,43 @@
         }
 
         @media (max-width: 768px) {
-            body {
-                padding-top: 220px;
-                /* Reduzido de 420px */
+            body { 
+                padding-top: 140px; 
+                padding-bottom: 90px; 
             }
+            header { padding: 8px 10px; gap: 8px; }
+            .header-esq h1 { font-size: 1rem; }
+            .termometro-wrapper { gap: 5px; }
+            .termometro { font-size: 0.55rem; padding: 2px 6px; }
+            .msg-termometro { font-size: 0.65rem; }
+            
+            .header-dir { flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+            .grupo-controles { width: 100%; align-items: flex-start; gap: 4px; }
+            .botoes-acao { justify-content: space-between; width: 100%; }
+            
+            .contador-semestres { font-size: 0.7rem; padding: 2px 6px; }
+            .contador-semestres button { padding: 2px 8px; font-size: 0.9rem; }
+            .perc-display { font-size: 1.4rem; position: absolute; right: 15px; top: 15px; }
 
-            .barra-simulacao {
-                flex-direction: column;
-                gap: 10px;
-                padding: 15px;
-                align-items: flex-start;
+            .grid-cards { 
+                grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); 
+                gap: 6px; 
             }
+            .card { padding: 6px 4px; min-height: 45px; }
+            .card-codigo { font-size: 0.5rem; }
+            .card-nome { font-size: 0.55rem; line-height: 1.1; }
+            .ch-badge { font-size: 0.5rem; margin-top: 2px; }
+
+            .barra-simulacao { 
+                flex-direction: column; 
+                gap: 8px; 
+                padding: 10px 15px; 
+                align-items: stretch; 
+            }
+            .sim-titulo { font-size: 0.9rem; }
+            .sim-detalhes { font-size: 0.75rem; }
+            .sim-destranca { font-size: 0.75rem; white-space: normal; }
+            .btn-limpar-sim { margin-left: 0; width: 100%; padding: 8px; }
         }
 
         .main-container {
@@ -1959,11 +1985,18 @@
             modoSimulacao = !modoSimulacao;
             document.getElementById('btn-modo-sim').classList.toggle('ativo', modoSimulacao);
             document.getElementById('barra-simulacao').classList.toggle('visivel', modoSimulacao);
-            if (!modoSimulacao) { planejadas.clear(); sugeridasPelaIA.clear(); turmasSelecionadas.clear(); reabrirSelecaoTrilha(); }
+            if (!modoSimulacao) { 
+                planejadas.clear(); sugeridasPelaIA.clear(); turmasSelecionadas.clear(); reabrirSelecaoTrilha(); 
+                document.body.style.paddingBottom = "80px";
+            } else {
+                document.body.style.paddingBottom = window.innerWidth <= 768 ? "180px" : "120px";
+            }
             atualizarInterface();
-            ajustarEspacoRodape(); // Adiciona esta linha
         }
-        function limparSimulacao() { toggleModoSimulacao(); }
+        function limparSimulacao() { 
+            if (modoSimulacao) toggleModoSimulacao(); 
+            document.body.style.paddingBottom = "80px";
+        }
         function resetarSimulacaoAtual() {
             if (confirm("Quer limpar as matérias selecionadas nesta simulação?")) {
                 planejadas.clear();
