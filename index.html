@@ -634,8 +634,26 @@
                 flex-direction: column; 
                 gap: 8px; 
                 padding: 10px 15px; 
-                align-items: stretch; 
+                align-items: stretch;
+                max-height: 80vh;
+                overflow-y: auto;
             }
+            
+            .ia-cards-container {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                justify-content: flex-start;
+                padding-bottom: 8px;
+                -webkit-overflow-scrolling: touch;
+            }
+            .ia-cards-container::-webkit-scrollbar { height: 4px; }
+            .ia-cards-container::-webkit-scrollbar-thumb { background: #4facfe; border-radius: 4px; }
+            .card-trilha {
+                flex: 0 0 100px;
+                min-height: 65px;
+                padding: 4px;
+            }
+            
             .sim-titulo { font-size: 0.9rem; }
             .sim-detalhes { font-size: 0.75rem; }
             .sim-destranca { font-size: 0.75rem; white-space: normal; }
@@ -2142,6 +2160,7 @@
                             document.getElementById('txt-trilha-ativa').innerText = trilhaSelecionadaGlobal;
                             document.getElementById('ia-bloco-selecao').style.display = 'none';
                             document.getElementById('ia-bloco-compacto').style.display = 'flex';
+                            ajustarEspacoRodape();
 
                         }, 800);
                     } else {
