@@ -9,7 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
     <!-- ========================================== -->
-    <!-- ZONA 1: ESTILOS E ANIMAÇÕES (CSS)          -->
+    <!-- ZONA 1: ESTILOS E ANIMAÇÕES (CSS)        -->
     <!-- ========================================== -->
     <style>
         :root {
@@ -603,61 +603,285 @@
         }
 
         @media (max-width: 768px) {
-            body { 
-                padding-top: 140px; 
-                padding-bottom: 90px; 
+            body {
+                padding-top: 200px;
+                padding-bottom: 90px;
             }
-            header { padding: 8px 10px; gap: 8px; }
-            .header-esq h1 { font-size: 1rem; }
-            .termometro-wrapper { gap: 5px; }
-            .termometro { font-size: 0.55rem; padding: 2px 6px; }
-            .msg-termometro { font-size: 0.65rem; }
-            
-            .header-dir { flex-wrap: wrap; gap: 8px; justify-content: space-between; }
-            .grupo-controles { width: 100%; align-items: flex-start; gap: 4px; }
-            .botoes-acao { justify-content: space-between; width: 100%; }
-            
-            .contador-semestres { font-size: 0.7rem; padding: 2px 6px; }
-            .contador-semestres button { padding: 2px 8px; font-size: 0.9rem; }
-            .perc-display { font-size: 1.4rem; position: absolute; right: 15px; top: 15px; }
 
-            .grid-cards { 
-                grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); 
-                gap: 6px; 
-            }
-            .card { padding: 6px 4px; min-height: 45px; }
-            .card-codigo { font-size: 0.5rem; }
-            .card-nome { font-size: 0.55rem; line-height: 1.1; }
-            .ch-badge { font-size: 0.5rem; margin-top: 2px; }
-
-            .barra-simulacao { 
-                flex-direction: column; 
-                gap: 8px; 
-                padding: 10px 15px; 
+            header {
+                padding: 12px 15px;
+                gap: 12px;
+                flex-direction: column;
                 align-items: stretch;
-                max-height: 80vh;
+            }
+
+            .header-top {
+                position: relative;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .header-esq {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 6px;
+                width: 65%;
+            }
+
+            .header-esq h1 {
+                font-size: 1.1rem;
+                line-height: 1.2;
+                margin: 0;
+            }
+
+            .termometro-wrapper {
+                gap: 5px;
+            }
+
+            .termometro {
+                font-size: 0.6rem;
+                padding: 3px 6px;
+                margin: 0;
+            }
+
+            .msg-termometro {
+                font-size: 0.65rem;
+                display: block;
+            }
+
+            .header-dir {
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .grupo-controles {
+                width: 100%;
+                align-items: stretch;
+                gap: 8px;
+            }
+
+            .nivel-badge {
+                font-size: 0.65rem;
+                padding: 4px;
+                text-align: center;
+            }
+
+            .contador-semestres {
+                font-size: 0.75rem;
+                padding: 4px 8px;
+                justify-content: space-between;
+                width: 100%;
+            }
+
+            .contador-semestres button {
+                padding: 2px 12px;
+                font-size: 1rem;
+            }
+
+            .botoes-acao {
+                justify-content: space-between;
+                width: 100%;
+                gap: 10px;
+                display: flex;
+            }
+
+            .botoes-acao button {
+                flex: 1;
+                text-align: center;
+                justify-content: center;
+            }
+
+            .perc-display {
+                font-size: 1.8rem;
+                position: absolute;
+                right: 0;
+                top: 0;
+                margin: 0;
+            }
+
+            .header-search-bar {
+                width: 100%;
+                margin-top: 5px;
+            }
+
+            .header-compacto {
+                flex-direction: column;
+                align-items: stretch;
+                padding: 10px 15px;
+            }
+
+            .header-compacto .header-top {
+                display: flex;
+            }
+
+            .header-compacto .header-search-bar {
+                order: initial;
+                width: 100%;
+                margin-top: 5px;
+                display: flex;
+            }
+
+            .header-compacto #campo-busca {
+                max-width: none;
+                width: 100%;
+            }
+
+            .header-compacto .header-esq {
+                order: initial;
+                margin-bottom: 0;
+            }
+
+            .grid-cards {
+                grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+                gap: 6px;
+            }
+
+            .card {
+                padding: 6px 4px;
+                min-height: 45px;
+            }
+
+            .card-codigo {
+                font-size: 0.5rem;
+            }
+
+            .card-nome {
+                font-size: 0.55rem;
+                line-height: 1.1;
+            }
+
+            .ch-badge {
+                font-size: 0.5rem;
+                margin-top: 2px;
+            }
+
+            .barra-simulacao {
+                flex-direction: column;
+                gap: 5px;
+                padding: 6px 10px;
+                align-items: stretch;
+                max-height: 50vh;
                 overflow-y: auto;
             }
-            
+
             .ia-cards-container {
                 flex-wrap: nowrap;
                 overflow-x: auto;
                 justify-content: flex-start;
-                padding-bottom: 8px;
+                padding-bottom: 4px;
+                /* Menos padding */
                 -webkit-overflow-scrolling: touch;
+                gap: 8px;
+                /* Espaço entre pílulas */
             }
-            .ia-cards-container::-webkit-scrollbar { height: 4px; }
-            .ia-cards-container::-webkit-scrollbar-thumb { background: #4facfe; border-radius: 4px; }
+
+            .ia-cards-container::-webkit-scrollbar {
+                height: 3px;
+            }
+
+            .ia-cards-container::-webkit-scrollbar-thumb {
+                background: #4facfe;
+                border-radius: 4px;
+            }
+
             .card-trilha {
-                flex: 0 0 100px;
-                min-height: 65px;
-                padding: 4px;
+                flex: 0 0 auto;
+                /* Permite que o card se molde ao conteúdo */
+                min-height: auto;
+                padding: 5px 12px;
+                border-radius: 25px;
+                /* Formato Pílula */
+                display: flex;
+                flex-direction: row;
+                /* Ícone e título lado a lado */
+                align-items: center;
+                gap: 4px;
             }
-            
-            .sim-titulo { font-size: 0.9rem; }
-            .sim-detalhes { font-size: 0.75rem; }
-            .sim-destranca { font-size: 0.75rem; white-space: normal; }
-            .btn-limpar-sim { margin-left: 0; width: 100%; padding: 8px; }
+
+            .card-trilha-icon {
+                font-size: 0.9rem;
+                margin-bottom: 0;
+            }
+
+            .card-trilha-titulo {
+                font-size: 0.75rem;
+                white-space: nowrap;
+                margin-bottom: 0;
+                font-weight: bold;
+            }
+
+            .card-trilha-desc {
+                display: none;
+            }
+
+            /* Esconde descrição no mobile */
+
+            .sim-titulo {
+                font-size: 0.8rem;
+                margin-bottom: 2px;
+            }
+
+            .sim-detalhes {
+                font-size: 0.7rem;
+            }
+
+            .sim-destranca {
+                display: none;
+                /* Esconde texto denso no mobile */
+            }
+
+            .btn-limpar-sim {
+                margin-left: 0;
+                width: 100%;
+                padding: 6px;
+                font-size: 0.8rem;
+            }
+
+            .tabela-grade {
+                font-size: 0.6rem;
+            }
+
+            .tabela-grade th,
+            .tabela-grade td {
+                padding: 2px 1px;
+                min-width: 48px;
+            }
+
+            .col-turno-esconder {
+                display: none !important;
+            }
+
+            .slot-hora-compacto {
+                padding: 2px !important;
+                font-size: 0.6rem;
+                min-width: 25px !important;
+            }
+
+            .pilula-materia {
+                font-size: 0.5rem;
+                padding: 2px 1px;
+                white-space: normal;
+                line-height: 1.1;
+                max-width: 52px;
+                margin: 0 auto;
+            }
+
+            .pilula-materia span.txt-cod {
+                display: block;
+                font-size: 0.55rem;
+                word-break: break-all;
+            }
+
+            .td-grade-dia {
+                min-width: 50px;
+            }
+
+            #modal-grade-body {
+                overflow-x: auto;
+                padding: 5px;
+            }
         }
 
         .main-container {
@@ -927,6 +1151,54 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+
+        .grade-mobile-lista {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .dia-card {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-top: 3px solid #4facfe;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .dia-titulo {
+            background: #2a2a2a;
+            color: #fff;
+            padding: 8px 12px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #333;
+        }
+
+        .slot-linha {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .slot-linha:last-child {
+            border-bottom: none;
+        }
+
+        .slot-horario {
+            font-size: 0.8rem;
+            color: #aaa;
+            font-weight: bold;
+            width: 40px;
+        }
+
+        .slot-materias {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
         }
 
         .pilula-materia span {
@@ -1345,24 +1617,177 @@
             transform: scale(1.05);
         }
 
-        .efeito-domino { 
-            border-color: #ffeb3b !important; 
-            box-shadow: 0 0 15px rgba(255, 235, 59, 0.7) !important; 
-            transform: scale(1.03); 
-            filter: brightness(1.2); 
-            z-index: 10; 
+        .efeito-domino {
+            border-color: #ffeb3b !important;
+            box-shadow: 0 0 15px rgba(255, 235, 59, 0.7) !important;
+            transform: scale(1.03);
+            filter: brightness(1.2);
+            z-index: 10;
             opacity: 1 !important;
             color: #111 !important;
         }
 
-        .efeito-domino-raiz { 
-            box-shadow: 0 0 20px rgba(0, 230, 118, 0.9) !important; 
-            border-color: #00e676 !important; 
-            transform: scale(1.03); 
-            filter: brightness(1.2); 
-            z-index: 10; 
+        .efeito-domino-raiz {
+            box-shadow: 0 0 20px rgba(0, 230, 118, 0.9) !important;
+            border-color: #00e676 !important;
+            transform: scale(1.03);
+            filter: brightness(1.2);
+            z-index: 10;
             opacity: 1 !important;
             color: #111 !important;
+        }
+
+        /* V8 L, V9, V10 Mobile: Ajuste seguro apenas mobile */
+        @media (max-width: 768px) {
+            body {
+                padding-top: 150px !important;
+                padding-bottom: 140px !important;
+            }
+
+            .grid-cards {
+                grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+                gap: 6px;
+            }
+
+            /* Todos os Cards padronizados em pílula horizontal (V10 Consistente) */
+            .card,
+            .optativa-card {
+                min-height: 35px !important;
+                padding: 4px 6px !important;
+                display: grid !important;
+                grid-template-columns: minmax(0, 1fr) auto !important;
+                grid-template-rows: auto auto !important;
+                align-items: center !important;
+                gap: 0 4px !important;
+            }
+
+            .card-icone-watermark {
+                display: none !important;
+            }
+
+            /* Itens originais dos Cards */
+            .card-codigo {
+                font-size: 0.5rem !important;
+                margin-bottom: 0px !important;
+                grid-column: 1 !important;
+                grid-row: 1 !important;
+                position: static !important;
+            }
+
+            .card-nome {
+                font-size: 0.55rem !important;
+                line-height: 1.1 !important;
+                margin-bottom: 0px !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                grid-column: 1 !important;
+                grid-row: 2 !important;
+                position: static !important;
+                display: block !important;
+                max-width: 100% !important;
+            }
+
+            .ch-badge {
+                grid-column: 2 !important;
+                grid-row: 1 / span 2 !important;
+                position: relative !important;
+                bottom: auto !important;
+                left: auto !important;
+                font-size: 0.55rem !important;
+                font-weight: bold !important;
+                background: rgba(0, 0, 0, 0.15) !important;
+                padding: 2px 4px !important;
+                border-radius: 4px !important;
+                border-top: none !important;
+                margin-top: 0 !important;
+            }
+
+            /* Correções estruturais para Optativas (Carrossel Optativo) */
+            .optativa-card>div:nth-child(2) {
+                grid-column: 1 !important;
+                grid-row: 1 / span 2 !important;
+                align-items: flex-start !important;
+                overflow: hidden !important;
+                width: 100% !important;
+                gap: 2px !important;
+            }
+
+            .optativa-card>div:nth-child(2)>span:first-child {
+                font-size: 0.5rem !important;
+                margin-bottom: 0px !important;
+                line-height: 1 !important;
+            }
+
+            .optativa-card>div:nth-child(2)>.card-nome {
+                grid-column: auto !important;
+                grid-row: auto !important;
+                /* Desabilita o layout grid explícito para ficar fluido no wrapper div */
+            }
+
+            .optativa-card>span:last-child {
+                grid-column: 2 !important;
+                grid-row: 1 / span 2 !important;
+                position: relative !important;
+                font-size: 0.55rem !important;
+                font-weight: bold !important;
+                padding: 2px 4px !important;
+                margin-top: 0 !important;
+                align-self: center !important;
+            }
+
+            /* Compactação Barra de Simulação Móvel */
+            .barra-simulacao {
+                padding: 8px 10px;
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .barra-simulacao>div>div:first-child[style*="font-weight:bold"] {
+                font-size: 0.9rem !important;
+            }
+
+            /* Ocultar a string enorme de "Liberadas" para liberar espaço no rodapé móvel */
+            #lista-liberadas {
+                display: none !important;
+            }
+
+            .btn-limpar-sim {
+                margin-left: 0;
+                width: 100%;
+                font-size: 0.75rem;
+                padding: 6px 10px;
+            }
+
+            /* Encolhimento Controlos IA Mobile */
+            .ia-cards-container {
+                gap: 4px;
+                margin-bottom: 6px;
+            }
+
+            .card-trilha {
+                width: 100px;
+                min-height: 60px;
+                padding: 4px;
+                gap: 2px;
+            }
+
+            .card-trilha-icon {
+                font-size: 1rem;
+            }
+
+            .card-trilha-titulo {
+                font-size: 0.65rem;
+            }
+
+            #btn-executar-ia {
+                padding: 6px 20px;
+                font-size: 0.8rem;
+            }
+
+            .ia-controls input[type=range] {
+                width: 150px;
+            }
         }
     </style>
 </head>
@@ -1767,13 +2192,13 @@
 
         function getDependentesFuturos(idBase) {
             const dependentes = new Set();
-            
+
             function buscarFuturos(idAtual) {
                 disciplinas.forEach(d => {
                     if (dependentes.has(d.id)) return;
-                    
+
                     let isDependent = false;
-                    
+
                     if (d.req) {
                         d.req.forEach(r => {
                             if (Array.isArray(r)) {
@@ -1783,7 +2208,7 @@
                             }
                         });
                     }
-                    
+
                     if (!isDependent && d.coreq) {
                         d.coreq.forEach(c => {
                             if (Array.isArray(c)) {
@@ -1793,21 +2218,21 @@
                             }
                         });
                     }
-                    
+
                     if (isDependent) {
                         dependentes.add(d.id);
                         buscarFuturos(d.id);
                     }
                 });
             }
-            
+
             buscarFuturos(idBase);
             return dependentes;
         }
 
         function iluminarDominó(idBase) {
             const dependentes = getDependentesFuturos(idBase);
-            
+
             const cardRaiz = document.getElementById(idBase);
             if (cardRaiz) {
                 cardRaiz.classList.add('efeito-domino-raiz');
@@ -2003,16 +2428,16 @@
             modoSimulacao = !modoSimulacao;
             document.getElementById('btn-modo-sim').classList.toggle('ativo', modoSimulacao);
             document.getElementById('barra-simulacao').classList.toggle('visivel', modoSimulacao);
-            if (!modoSimulacao) { 
-                planejadas.clear(); sugeridasPelaIA.clear(); turmasSelecionadas.clear(); reabrirSelecaoTrilha(); 
+            if (!modoSimulacao) {
+                planejadas.clear(); sugeridasPelaIA.clear(); turmasSelecionadas.clear(); reabrirSelecaoTrilha();
                 document.body.style.paddingBottom = "80px";
             } else {
                 document.body.style.paddingBottom = window.innerWidth <= 768 ? "180px" : "120px";
             }
             atualizarInterface();
         }
-        function limparSimulacao() { 
-            if (modoSimulacao) toggleModoSimulacao(); 
+        function limparSimulacao() {
+            if (modoSimulacao) toggleModoSimulacao();
             document.body.style.paddingBottom = "80px";
         }
         function resetarSimulacaoAtual() {
@@ -2284,7 +2709,7 @@
                          </div>`;
             }
 
-            html += '<table class="tabela-grade"><thead><tr><th>Turno</th><th>Slot</th>';
+            html += '<table class="tabela-grade"><thead><tr><th class="col-turno-esconder">Turno</th><th>Slot</th>';
             DIAS_NOME.forEach(d => html += `<th>${d}</th>`);
             html += '</tr></thead><tbody>';
 
@@ -2292,14 +2717,14 @@
                 linha.slots.forEach((slotNum, idx) => {
                     html += '<tr>';
                     if (idx === 0) {
-                        html += `<td class="slot-turno-label" rowspan="${linha.slots.length}">${linha.label}</td>`;
+                        html += `<td class="slot-turno-label col-turno-esconder" rowspan="${linha.slots.length}">${linha.label}</td>`;
                     }
-                    html += `<td class="slot-turno-label">${linha.turno}${slotNum}</td>`;
+                    html += `<td class="slot-turno-label slot-hora-compacto">${linha.turno}${slotNum}</td>`;
                     DIAS.forEach(dia => {
                         const chave = `${dia}${linha.turno}${slotNum}`;
                         const arr = mapa[chave];
                         if (arr && arr.length > 0) {
-                            html += '<td><div class="slot-celula">';
+                            html += '<td class="td-grade-dia"><div class="slot-celula">';
                             arr.forEach(p => {
                                 const disc = disciplinas.find(d => d.codigo === p.codigo);
                                 let matchText = ''; let iconeIA = ''; let setas = '';
@@ -2311,7 +2736,6 @@
                                         iconeIA = ' ✨';
                                     }
 
-                                    // Setas de troca (só se houver mais de 1 horário)
                                     const numTurmas = separarTurmas(disc.horario).length;
                                     if (numTurmas > 1) {
                                         const idxAtual = (turmasSelecionadas.get(p.codigo) || 0);
@@ -2322,17 +2746,16 @@
 
                                 const cls = p.choque ? 'pilula-choque' : 'pilula-ok';
                                 const [setaEsq, setaDir] = setas ? setas.split('</span>').filter(s => s.trim()) : ['', ''];
-                                html += `<div class="pilula-materia ${cls}" title="${p.nome}${matchText}">${setaEsq ? setaEsq + '</span>' : ''}${p.codigo}${iconeIA}${setaDir ? setaDir + '</span>' : ''}</div>`;
+                                html += `<div class="pilula-materia ${cls}" title="${p.nome}${matchText}">${setaEsq ? setaEsq + '</span>' : ''}<span class="txt-cod">${p.codigo}</span>${iconeIA}${setaDir ? setaDir + '</span>' : ''}</div>`;
                             });
                             html += '</div></td>';
                         } else {
-                            html += '<td></td>';
+                            html += '<td class="td-grade-dia"></td>';
                         }
                     });
                     html += '</tr>';
                 });
             });
-
             html += '</tbody></table>';
             if (planejadas.size === 0) {
                 html = '<div style="text-align:center; color:#777; padding:30px; font-style:italic;">Nenhuma matéria simulada. Clique nas matérias para planejar.</div>';
