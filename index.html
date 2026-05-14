@@ -2802,29 +2802,6 @@
                     <!-- SEÇÃO RESUMO -->
                     <section id="dash-resumo" class="dash-secao">
                         <div class="dash-secao-titulo">&#128202; Indicadores de Progresso</div>
-                        <div
-                            style="margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; border: 1px solid rgba(79,172,254,0.2);">
-                            <div class="dash-secao-titulo" style="font-size: 0.9rem; margin-bottom: 8px;">&#128221;
-                                Calibrador SIGAA (Para Transferidos)</div>
-                            <div style="display: flex; gap: 16px; align-items: center;">
-                                <div>
-                                    <label for="input-sigaa-obg"
-                                        style="font-size: 0.75rem; color: #cbd5e1; font-weight: 600; display: block; margin-bottom: 4px;">Obrigatórias
-                                        Integralizadas no SIGAA</label>
-                                    <input type="number" id="input-sigaa-obg" placeholder="0" min="0" max="2265"
-                                        style="width: 120px; padding: 6px 10px; border: 1px solid rgba(79,172,254,0.3); border-radius: 6px; background: rgba(255,255,255,0.05); color: #f8fafc; font-size: 0.8rem; text-align: center;"
-                                        value="0">
-                                </div>
-                                <div>
-                                    <label for="input-sigaa-opt"
-                                        style="font-size: 0.75rem; color: #cbd5e1; font-weight: 600; display: block; margin-bottom: 4px;">Optativas
-                                        Integralizadas no SIGAA</label>
-                                    <input type="number" id="input-sigaa-opt" placeholder="0" min="0" max="1335"
-                                        style="width: 120px; padding: 6px 10px; border: 1px solid rgba(79,172,254,0.3); border-radius: 6px; background: rgba(255,255,255,0.05); color: #f8fafc; font-size: 0.8rem; text-align: center;"
-                                        value="0">
-                                </div>
-                            </div>
-                        </div>
                         <div class="dash-kpi-grid">
                             <div class="dash-kpi-card" style="--kpi-cor: linear-gradient(90deg,#4facfe,#00f2fe);">
                                 <div class="dash-kpi-label">Total Integralizado</div>
@@ -3919,12 +3896,12 @@
                 }
             });
 
-            let pisoOBG = Number.parseInt(document.getElementById('input-sigaa-obg')?.value, 10) || 0;
-            let pisoOPT = Number.parseInt(document.getElementById('input-sigaa-opt')?.value, 10) || 0;
+            let pisoOBG = 0; // Removido Calibrador SIGAA
+            let pisoOPT = 0; // Removido Calibrador SIGAA
 
-            let obgCalculado = Math.max(pisoOBG, cliquesOBG);
+            let obgCalculado = cliquesOBG;
             let cliquesOptComML = cliquesOPT + Math.min(cliquesML, 360);
-            let optCalculado = Math.max(pisoOPT, cliquesOptComML);
+            let optCalculado = cliquesOptComML;
 
             let obgFinal = Math.min(obgCalculado, 2265);
             let optFinal = Math.min(optCalculado, 1335);
@@ -5125,19 +5102,7 @@
 
         window.onload = iniciarAplicacao;
 
-        // Event listeners para os inputs SIGAA
-        document.getElementById('input-sigaa-obg')?.addEventListener('input', function () {
-            recalcularProgressoGlobal();
-        });
-        document.getElementById('input-sigaa-obg')?.addEventListener('change', function () {
-            recalcularProgressoGlobal();
-        });
-        document.getElementById('input-sigaa-opt')?.addEventListener('input', function () {
-            recalcularProgressoGlobal();
-        });
-        document.getElementById('input-sigaa-opt')?.addEventListener('change', function () {
-            recalcularProgressoGlobal();
-        });
+        // Event listeners do SIGAA removidos devido à limpeza de UI
 
 
     </script>
