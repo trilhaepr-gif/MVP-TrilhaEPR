@@ -1817,16 +1817,23 @@
             background: transparent;
             color: #aaa;
             border: 1px solid #555;
-            padding: 6px 15px;
+            padding: 8px 15px;
             border-radius: 20px;
             font-size: 0.8rem;
             cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.2s ease;
         }
 
         .pilula-filtro.ativa {
             background: #e0e0e0;
             color: #111;
             font-weight: bold;
+        }
+
+        .card-vitrine {
+            min-height: 140px;
+            padding: 16px 15px;
         }
 
         .bloco-cadeia {
@@ -2187,6 +2194,19 @@
             .ia-cards-container {
                 gap: 4px;
                 margin-bottom: 6px;
+            }
+
+            .pilula-filtro {
+                padding: 10px 18px;
+                min-height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .card-vitrine {
+                min-height: 120px;
+                padding: 12px 12px;
             }
 
             .guia-popover {

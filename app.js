@@ -341,7 +341,7 @@
                 disciplinas.filter(d => d.sem === 98).forEach(m => {
                     const card = document.createElement('div');
                     card.id = m.id;
-                    card.className = `optativa-card ${m.area}`;
+                    card.className = `optativa-card card-vitrine ${m.area}`;
                     card.setAttribute('data-area', m.area);
                     card.setAttribute('data-trilha', m.area);
                     if (!cumpreRequisitos(m)) {
@@ -1002,8 +1002,11 @@
         }
 
         function filtrarOptativas(area, ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const botaoAtual = ev.currentTarget || ev.target;
             document.querySelectorAll('.pilula-filtro').forEach(b => b.classList.remove('ativa'));
-            ev.target.classList.add('ativa');
+            botaoAtual.classList.add('ativa');
             document.querySelectorAll('.optativa-card').forEach(c => {
                 c.style.display = (area === 'todas' || c.getAttribute('data-area') === area) ? 'flex' : 'none';
             });
