@@ -1,6 +1,7 @@
 # ==========================================
 # 2. MOTOR LÓGICO
 # ==========================================
+from fastapi.middleware.cors import CORSMiddleware
 import re
 from pathlib import Path
 
@@ -9,16 +10,67 @@ import pandas as pd
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permite que qualquer porta (incluindo a 5500) se conecte
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite pedidos POST, GET, etc.
+    allow_headers=["*"],
+)
+
 DATA_PATH = Path(__file__).resolve().parent / "disciplinas.csv"
 df_base = pd.read_csv(DATA_PATH, sep=';')
 
 class MotorSAD:
-    CADEIAS = [ ["ENM0131", "ENM0190"], ["MAT0127", "MAT0031"], ["ENE0334", "CIC0007"], ["ENC0035", "ENC0132"] ]
-
     def __init__(self, df):
         # O índice agora é 'codigo' (minúsculo, mas processado para maiúsculo)
         self.disciplinas = df.set_index('codigo').to_dict('index') if not df.empty else {}
+        self.totais_por_tipo = self._calcular_totais_por_tipo(df)
+        self.totais_por_area = self._calcular_totais_por_area(df)
+        self.seletivas_por_grupo = self._carregar_cadeias_seletivas(df)
+        self.total_horas_obg = self.totais_por_tipo.get('OBG', 0)
+        self.total_horas_opt = self.totais_por_tipo.get('OPT', 0)
+        self.total_horas_ml = self.totais_por_tipo.get('ML', 0)
         self.impacto_futuro = self._calcular_impacto_futuro()
+
+    def _carregar_cadeias_seletivas(self, df):
+        df2 = df.copy()
+        df2['area_norm'] = df2['area'].astype(str).str.lower().str.strip()
+        group_col = next((col for col in ['cadeia', 'grupo'] if col in df2.columns), None)
+        if group_col is None:
+            return {}
+
+        df2['grupo_norm'] = df2[group_col].astype(str).str.lower().str.strip()
+        seletivas = df2[df2['area_norm'] == 'seletiva-chave']
+        grupos = {}
+        for grupo, group_df in seletivas.groupby('grupo_norm'):
+            codigos = set(group_df['codigo'].astype(str).str.upper().str.strip())
+            if codigos:
+                grupos[grupo] = codigos
+        return grupos
+
+    def obter_grupo_seletiva_por_codigo(self, codigo):
+        codigo = str(codigo).strip().upper()
+        for grupo, codigos in self.seletivas_por_grupo.items():
+            if codigo in codigos:
+                return grupo, codigos
+        return None, None
+
+    def _calcular_totais_por_tipo(self, df):
+        df2 = df.copy()
+        df2['tipo_norm'] = df2['tipo'].astype(str).str.upper().str.strip()
+        df2['horas_num'] = pd.to_numeric(df2['horas'], errors='coerce').fillna(0).astype(int)
+        return {
+            'OBG': int(df2[df2['tipo_norm'].isin(['OBG', 'OBRIG'])]['horas_num'].sum()),
+            'OPT': int(df2[df2['tipo_norm'] == 'OPT']['horas_num'].sum()),
+            'ML': int(df2[df2['tipo_norm'] == 'ML']['horas_num'].sum())
+        }
+
+    def _calcular_totais_por_area(self, df):
+        df2 = df.copy()
+        df2['area_norm'] = df2['area'].astype(str).str.lower().str.strip()
+        df2['horas_num'] = pd.to_numeric(df2['horas'], errors='coerce').fillna(0).astype(int)
+        return df2.groupby('area_norm')['horas_num'].sum().to_dict()
 
     def _calcular_impacto_futuro(self):
         grafo = {c: set() for c in self.disciplinas}
@@ -83,7 +135,7 @@ motor = MotorSAD(df_base)
 def custo_turma(turma_str: str) -> float:
     """
     Calcula o custo apenas por turno (N > T > M).
-    Dias da semana (2-7) são tratados com peso igual.
+    Dias da semana (2-7) são tratados com peso igual.Pesos:
     Noite (0.0) > Tarde (3.0) > Manhã (5.0).
     Uma pequena penalidade por dispersão para preferir blocos de aula.
     """
@@ -225,11 +277,12 @@ def otimizar(req: RequisicaoGrade):
         
         peso_tipo = 2 # 0: Core OBG, 1: Seletiva, 2: Optativa
         if tipo in ['OBG', 'OBRIG']:
-            cadeia = next((c for c in motor.CADEIAS if cod in c), None)
-            if cadeia is None: 
+            grupo, grupo_codigos = motor.obter_grupo_seletiva_por_codigo(cod)
+            if grupo is None:
                 peso_tipo = 0
             else:
-                if any(c_cod in hist_clean for c_cod in cadeia): continue
+                if any(c_cod in hist_clean for c_cod in grupo_codigos):
+                    continue
                 peso_tipo = 1
 
         # Prioridade noturna: penaliza horários sem turno N
@@ -269,3 +322,15 @@ def otimizar(req: RequisicaoGrade):
                 total_h += c
                 
     return {"horas_totais": total_h, "grade": sugestoes_completas}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "main:app",
+        host="127.0.0.1",
+        port=8000,
+        log_level="info",
+        reload=False
+    )

@@ -56,9 +56,6 @@
                         <button onclick="mudarSemestre(1)">+</button>
                     </div>
                     <div class="botoes-acao">
-                        <button id="btn-abrir-dashboard" onclick="abrirDashboardOverlay()" title="Ver Análise do Perfil">
-                            <span class="dash-btn-icon">&#128202;</span> Perfil Analítico
-                        </button>
                         <button class="btn-simular" id="btn-modo-sim" onclick="toggleModoSimulacao()">✨ Simular com
                             IA</button>
                         <button class="btn-reset" onclick="limparProgresso()">Zerar</button>
@@ -74,6 +71,13 @@
         </div>
     </header>
 
+    <!-- ══════════════════════════════════════════════════════════════════ -->
+    <!-- BOTÃO FLUTUANTE: Abre o Dashboard Analítico                       -->
+    <!-- ══════════════════════════════════════════════════════════════════ -->
+    <button id="btn-abrir-dashboard" onclick="abrirDashboardOverlay()" title="Ver Análise do Perfil">
+        <span class="dash-btn-icon">&#128202;</span>
+        Ver Análise do Perfil
+    </button>
 
     <!-- ══════════════════════════════════════════════════════════════════ -->
     <!-- ZONA: DASHBOARD ANALÍTICO FULL-SCREEN (OVERLAY/SPA)              -->
@@ -279,16 +283,9 @@
                         <div class="card-trilha-desc">Equilíbrio da grade.</div>
                     </div>
                 </div>
-                <div class="ia-acao-carga-wrapper">
-                    <div class="ia-carga-container">
-                        <label for="ia-carga" class="ia-carga-label">
-                            Carga IA: <b id="valor-carga" style="color: #fff;">240h</b>
-                        </label>
-                        <input type="range" id="ia-carga" min="120" max="420" step="30" value="240"
-                            class="ia-carga-range"
-                            oninput="document.getElementById('valor-carga').innerText = this.value + 'h'">
-                    </div>
-                    <button id="btn-executar-ia" class="btn-ia" disabled onclick="executarIA()">
+                <div style="width: 100%; text-align: center; margin-bottom: 2px;">
+                    <button id="btn-executar-ia" class="btn-ia" disabled onclick="executarIA()"
+                        style="padding: 6px 25px; font-size: 0.85rem; opacity: 0.5;">
                         ✨ Auto-Completar
                     </button>
                 </div>
@@ -301,6 +298,15 @@
                 <button class="btn-alterar-trilha" onclick="reabrirSelecaoTrilha()">🔄 Alterar Trilha</button>
             </div>
 
+            <div
+                style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 5px;">
+                <label for="ia-carga" style="font-size: 0.7rem; color: #aaa; margin-bottom: 2px;">
+                    Carga IA: <b id="valor-carga" style="color: #fff;">240h</b>
+                </label>
+                <input type="range" id="ia-carga" min="120" max="420" step="30" value="240"
+                    style="width: 120px; cursor: pointer; height: 12px;"
+                    oninput="document.getElementById('valor-carga').innerText = this.value + 'h'">
+            </div>
         </div>
 
         <div style="display: flex; gap: 10px; align-items: center; flex: 1; justify-content: flex-end;">
