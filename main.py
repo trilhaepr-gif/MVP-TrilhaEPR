@@ -3,6 +3,7 @@
 # ==========================================
 from fastapi.middleware.cors import CORSMiddleware
 import re
+import unicodedata
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,7 +20,15 @@ app.add_middleware(
 )
 
 DATA_PATH = Path(__file__).resolve().parent / "disciplinas.csv"
-df_base = pd.read_csv(DATA_PATH, sep=';')
+df_base = pd.read_csv(DATA_PATH, sep=';', dtype=str, keep_default_na=False, na_filter=False)
+
+def _sanitize_dataframe_strings(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for col in df.columns:
+        df[col] = df[col].astype(str).fillna('').str.strip()
+    return df
+
+df_base = _sanitize_dataframe_strings(df_base)
 
 class MotorSAD:
     def __init__(self, df):
@@ -97,16 +106,20 @@ class MotorSAD:
         return {node: len(get_descendentes(node, set())) for node in self.disciplinas}
 
     def extrair_slots(self, horario):
-        if not horario or str(horario).strip() in ['', 'nan', 'None'] or 'NÃO OFERTADA' in str(horario).upper(): 
-            return []
-        slots = []
-        # NOVO: Usa finditer para achar múltiplos blocos na mesma string de turma
-        for bloco in re.finditer(r'([2-7]+)([MTN])([1-7]+)', str(horario).strip()):
+        if not horario or str(horario).strip() in ['', 'nan', 'None'] or 'NÃO OFERTADA' in str(horario).upper():
+            return set()
+        slots = set()
+        horario_str = str(horario).upper().replace(' ', '')
+        # Captura blocos do tipo 35T45, 246N12, 2M12 etc.
+        for bloco in re.finditer(r'([2-7]+)([MTN])([1-6]+)', horario_str):
             dias, turno, horas = bloco.groups()
             for d in dias:
-                for h in horas: 
-                    slots.append(f"{d}{turno}{h}")
+                for h in horas:
+                    slots.add(f"{d}{turno}{h}")
         return slots
+
+    def tem_choque_horario(self, slots: set, slots_ocupados: set) -> bool:
+        return bool(slots & slots_ocupados)
 
     def checar_requisitos(self, expressao, historico):
         if not expressao or str(expressao).strip() in ['', 'nan', 'None']: return True
@@ -153,54 +166,158 @@ def custo_turma(turma_str: str) -> float:
 
     return custo
 
-def escolher_turma(horario_str: str, slots_ocupados: set, horas_necessarias: int) -> tuple:
-    """
-    Avalia todas as turmas. Só aceita turmas sem choque E que possuam
-    a quantidade EXATA (ou superior) de slots que a carga horária exige.
-    """
+def parse_codigos(campo: str) -> list[str]:
+    if not campo:
+        return []
+    return [c for c in re.findall(r'[A-Z0-9_]+', str(campo).upper())]
+
+
+def normalizar_texto(texto: str) -> str:
+    if not texto:
+        return ''
+    texto_norm = unicodedata.normalize('NFKD', str(texto).strip().lower())
+    return ''.join(ch for ch in texto_norm if unicodedata.category(ch) != 'Mn')
+
+
+def calcular_match_afinidade(texto_foco: str, dados: dict) -> int:
+    if not texto_foco:
+        return 0
+
+    documento = ' '.join([
+        str(dados.get('nome', '')),
+        str(dados.get('area', '')),
+        str(dados.get('requisitos', '')),
+        str(dados.get('corequisitos', ''))
+    ]).lower()
+
+    foco_tokens = set(re.findall(r'\b[a-z0-9]+\b', normalizar_texto(texto_foco)))
+    doc_tokens = set(re.findall(r'\b[a-z0-9]+\b', normalizar_texto(documento)))
+    if not foco_tokens or not doc_tokens:
+        return 0
+
+    overlap = foco_tokens & doc_tokens
+    return min(100, int(len(overlap) / max(len(foco_tokens), 1) * 100))
+
+
+def obter_turmas_validas(horario_str: str, slots_ocupados: set, horas_necessarias: int) -> list[tuple[float, set, str]]:
     turmas = [t.strip() for t in str(horario_str).split(',') if t.strip()]
     candidatas = []
-    
-    # Validação de ferro: 30h = 2 slots | 60h = 4 slots
     slots_esperados = horas_necessarias // 15
-    
+
     for turma in turmas:
         slots = motor.extrair_slots(turma)
-        
-        # Só aceita a turma se ela preencher a carga horária e não tiver choques
-        if slots and len(slots) >= slots_esperados:
-            if not any(s in slots_ocupados for s in slots):
-                candidatas.append((custo_turma(turma), slots, turma))
-
-    if not candidatas:
-        return [], None
+        if not slots or len(slots) < slots_esperados:
+            continue
+        if motor.tem_choque_horario(slots, slots_ocupados):
+            continue
+        candidatas.append((custo_turma(turma), slots, turma))
 
     candidatas.sort(key=lambda x: x[0])
+    return candidatas
+
+
+def escolher_turma(horario_str: str, slots_ocupados: set, horas_necessarias: int) -> tuple[set, str]:
+    candidatas = obter_turmas_validas(horario_str, slots_ocupados, horas_necessarias)
+    if not candidatas:
+        return set(), None
+
     _, slots_best, turma_best = candidatas[0]
     return slots_best, turma_best
+
+
+def alocar_disciplina_com_corequisitos(codigo: str, dados: dict, slots_ocupados: set, total_h: int, carga_maxima: int, hist_clean: list[str], plan_clean: list[str], accepted_codes: set[str]):
+    horas_disciplina = int(dados.get('horas', 0))
+    horario_disciplina = dados.get('horario', '')
+    coreq_codes = [coreq for coreq in parse_codigos(dados.get('corequisitos', '')) if coreq]
+    missing_coreqs = [coreq for coreq in coreq_codes if coreq not in hist_clean and coreq not in plan_clean and coreq not in accepted_codes]
+
+    for _, slots_principal, turma_principal in obter_turmas_validas(horario_disciplina, slots_ocupados, horas_disciplina):
+        if total_h + horas_disciplina > carga_maxima:
+            continue
+
+        temp_slots = set(slots_ocupados)
+        temp_slots.update(slots_principal)
+        temp_total_h = total_h + horas_disciplina
+        coreq_additions = []
+        failed = False
+
+        for coreq in missing_coreqs:
+            status_coreq = coreq in hist_clean or coreq in plan_clean or coreq in accepted_codes
+            resultado_alocacao = False
+            coreq_data = motor.disciplinas.get(coreq)
+
+            if codigo == 'EPR0065':
+                print('>>> AVALIANDO EPR0065')
+                print(f"Co-requisito lido do CSV: '{dados.get('corequisitos', '')}'")
+                print(f"EPR0009 já concluída/planejada? {status_coreq}")
+
+            if not coreq_data or not motor.checar_requisitos(coreq_data.get('requisitos', ''), hist_clean):
+                if codigo == 'EPR0065':
+                    print(f"Tentando alocar {coreq}... Resultado: False")
+                failed = True
+                break
+
+            coreq_horas = int(coreq_data.get('horas', 0))
+            if temp_total_h + coreq_horas > carga_maxima:
+                if codigo == 'EPR0065':
+                    print(f"Tentando alocar {coreq}... Resultado: False")
+                failed = True
+                break
+
+            coreq_slots, coreq_turma = escolher_turma(coreq_data.get('horario', ''), temp_slots, coreq_horas)
+            resultado_alocacao = bool(coreq_slots)
+            if codigo == 'EPR0065':
+                print(f"Tentando alocar {coreq}... Resultado: {resultado_alocacao}")
+
+            if not coreq_slots:
+                failed = True
+                break
+
+            temp_slots.update(coreq_slots)
+            temp_total_h += coreq_horas
+            coreq_additions.append((coreq, coreq_turma, coreq_slots, coreq_data))
+
+        if failed:
+            continue
+
+        return {
+            'principal': (codigo, turma_principal, slots_principal, dados),
+            'coreqs': coreq_additions
+        }
+
+    return None
 
 # ==========================================
 # 4. ENDPOINT DA API
 # ==========================================
 from pydantic import BaseModel
-import math
 
 
-def gerar_embeddings_hf(textos: list[str]) -> list[list[float]]:
-    """Placeholder: retorna embeddings neutros.
-    Substituir por implementação real com Hugging Face ou outra API.
-    """
-    return [[0.0] * 768 for _ in textos]
+def normalizar_texto(texto: str) -> str:
+    if not texto:
+        return ''
+    texto_norm = unicodedata.normalize('NFKD', str(texto).strip().lower())
+    return ''.join(ch for ch in texto_norm if unicodedata.category(ch) != 'Mn')
 
 
-def cos_sim(v1: list[float], v2: list[float]) -> float:
-    if not v1 or not v2 or len(v1) != len(v2):
-        return 0.0
+def calcular_match_afinidade(texto_foco: str, dados: dict) -> int:
+    if not texto_foco:
+        return 0
 
-    dot = sum(x * y for x, y in zip(v1, v2))
-    norm1 = math.sqrt(sum(x * x for x in v1))
-    norm2 = math.sqrt(sum(y * y for y in v2))
-    return dot / (norm1 * norm2) if norm1 and norm2 else 0.0
+    documento = ' '.join([
+        str(dados.get('nome', '')),
+        str(dados.get('area', '')),
+        str(dados.get('requisitos', '')),
+        str(dados.get('corequisitos', ''))
+    ]).lower()
+
+    foco_tokens = set(re.findall(r'\b[a-z0-9]+\b', normalizar_texto(texto_foco)))
+    doc_tokens = set(re.findall(r'\b[a-z0-9]+\b', normalizar_texto(documento)))
+    if not foco_tokens or not doc_tokens:
+        return 0
+
+    overlap = foco_tokens & doc_tokens
+    return min(100, int(len(overlap) / max(len(foco_tokens), 1) * 100))
 
 
 class RequisicaoGrade(BaseModel):
@@ -219,8 +336,8 @@ descricoes_areas = {
 
 @app.post("/otimizar")
 def otimizar(req: RequisicaoGrade):
-    texto_foco = descricoes_areas.get(req.trilha, descricoes_areas["Explorar"])
-    vetor_foco = gerar_embeddings_hf([texto_foco])[0]
+    trilha_chaves = {normalizar_texto(k): k for k in descricoes_areas}
+    texto_foco = descricoes_areas.get(trilha_chaves.get(normalizar_texto(req.trilha), ''), descricoes_areas["Explorar"])
     hist_clean = [str(h).strip().upper() for h in req.historico]
     
     # Normaliza planejadas: aceita dicts {codigo, turma} ou strings puras
@@ -245,7 +362,21 @@ def otimizar(req: RequisicaoGrade):
         if cod in motor.disciplinas:
             horario = motor.disciplinas[cod].get('horario', '')
             horas_materia = int(motor.disciplinas[cod].get('horas', 0))
-            slots_escol, turma_best = escolher_turma(horario, slots_ocupados, horas_materia)
+            turma_desejada = str(item.get('turma', '')).strip()
+            slots_escol = []
+            turma_best = None
+
+            # Se o utilizador fixou uma turma, tenta primeiro essa turma específica.
+            if turma_desejada:
+                slots = motor.extrair_slots(turma_desejada)
+                if slots and len(slots) >= horas_materia // 15 and not motor.tem_choque_horario(slots, slots_ocupados):
+                    slots_escol = slots
+                    turma_best = turma_desejada
+                else:
+                    # Ainda assim tenta outras turmas da mesma disciplina antes de descartá-la.
+                    slots_escol, turma_best = escolher_turma(horario, slots_ocupados, horas_materia)
+            else:
+                slots_escol, turma_best = escolher_turma(horario, slots_ocupados, horas_materia)
 
             if slots_escol:
                 slots_ocupados.update(slots_escol)
@@ -290,10 +421,7 @@ def otimizar(req: RequisicaoGrade):
         if 'N' not in horario_str:
             peso_tipo += 5
 
-        match_ia = 0
-        if dados.get('Vetor_Ementa') is not None and vetor_foco is not None:
-            sim = cos_sim(vetor_foco, dados['Vetor_Ementa'])
-            if not math.isnan(sim): match_ia = min(100, max(0, int(sim * 100)))
+        match_ia = calcular_match_afinidade(texto_foco, dados)
 
         possiveis.append({
             'Codigo': cod, 'Semestre': semestre, 'PesoTipo': peso_tipo, 'MatchIA': match_ia, 'Dados': dados
@@ -301,26 +429,54 @@ def otimizar(req: RequisicaoGrade):
             
     # 3. Regra 2: Ordenação Simples (1º Semestre, 2º PesoTipo, 3º MatchIA DESC)
     possiveis.sort(key=lambda x: (x['Semestre'], x['PesoTipo'], -x['MatchIA']))
-    
+    accepted_codes = set(plan_clean)
+
     # 4. Regra 3: Preenchimento com Heurística de Turma Ergônomica
     for item in possiveis:
-        c = int(item['Dados']['horas'])
-        if total_h + c <= req.carga_maxima:
-            slots_escol, turma_best = escolher_turma(item['Dados']['horario'], slots_ocupados, c)
-            
-            # CORREÇÃO 2 APLICADA AQUI: O bloco de alocação voltou
-            if slots_escol:
-                # Inclui a turma escolhida no payload para ser aplicada pelo frontend
-                sugestoes_completas.append({
-                    'codigo': item['Codigo'],
-                    'match': item['MatchIA'],
-                    'turma_escolhida': turma_best or '',
-                    'origem': 'sugestao_ia'
-                })
-                # Regista os slots para não haver choques futuros
-                slots_ocupados.update(slots_escol)
-                total_h += c
-                
+        codigo = item['Codigo']
+        dados = item['Dados']
+        c = int(dados.get('horas', 0))
+
+        if total_h + c > req.carga_maxima:
+            continue
+
+        resultado = alocar_disciplina_com_corequisitos(
+            codigo,
+            dados,
+            slots_ocupados,
+            total_h,
+            req.carga_maxima,
+            hist_clean,
+            plan_clean,
+            accepted_codes
+        )
+
+        if not resultado:
+            continue
+
+        codigo_principal, turma_principal, slots_principal, dados_principal = resultado['principal']
+
+        sugestoes_completas.append({
+            'codigo': codigo_principal,
+            'match': item['MatchIA'],
+            'turma_escolhida': turma_principal or '',
+            'origem': 'sugestao_ia'
+        })
+        slots_ocupados.update(slots_principal)
+        total_h += int(dados_principal.get('horas', 0))
+        accepted_codes.add(codigo_principal)
+
+        for coreq_codigo, coreq_turma, coreq_slots, coreq_data in resultado['coreqs']:
+            sugestoes_completas.append({
+                'codigo': coreq_codigo,
+                'match': 0,
+                'turma_escolhida': coreq_turma or '',
+                'origem': 'corequisito'
+            })
+            slots_ocupados.update(coreq_slots)
+            total_h += int(coreq_data.get('horas', 0))
+            accepted_codes.add(coreq_codigo)
+
     return {"horas_totais": total_h, "grade": sugestoes_completas}
 
 
