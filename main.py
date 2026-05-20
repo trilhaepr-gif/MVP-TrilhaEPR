@@ -188,15 +188,19 @@ def calcular_match_afinidade(texto_foco: str, dados: dict) -> int:
         str(dados.get('area', '')),
         str(dados.get('requisitos', '')),
         str(dados.get('corequisitos', ''))
-    ]).lower()
+    ])
 
     foco_tokens = set(re.findall(r'\b[a-z0-9]+\b', normalizar_texto(texto_foco)))
     doc_tokens = set(re.findall(r'\b[a-z0-9]+\b', normalizar_texto(documento)))
     if not foco_tokens or not doc_tokens:
         return 0
 
-    overlap = foco_tokens & doc_tokens
-    return min(100, int(len(overlap) / max(len(foco_tokens), 1) * 100))
+    intersection = foco_tokens & doc_tokens
+    union = foco_tokens | doc_tokens
+    if not union:
+        return 0
+
+    return int(len(intersection) / len(union) * 100)
 
 
 def obter_turmas_validas(horario_str: str, slots_ocupados: set, horas_necessarias: int) -> list[tuple[float, set, str]]:
@@ -242,33 +246,18 @@ def alocar_disciplina_com_corequisitos(codigo: str, dados: dict, slots_ocupados:
         failed = False
 
         for coreq in missing_coreqs:
-            status_coreq = coreq in hist_clean or coreq in plan_clean or coreq in accepted_codes
-            resultado_alocacao = False
             coreq_data = motor.disciplinas.get(coreq)
 
-            if codigo == 'EPR0065':
-                print('>>> AVALIANDO EPR0065')
-                print(f"Co-requisito lido do CSV: '{dados.get('corequisitos', '')}'")
-                print(f"EPR0009 já concluída/planejada? {status_coreq}")
-
             if not coreq_data or not motor.checar_requisitos(coreq_data.get('requisitos', ''), hist_clean):
-                if codigo == 'EPR0065':
-                    print(f"Tentando alocar {coreq}... Resultado: False")
                 failed = True
                 break
 
             coreq_horas = int(coreq_data.get('horas', 0))
             if temp_total_h + coreq_horas > carga_maxima:
-                if codigo == 'EPR0065':
-                    print(f"Tentando alocar {coreq}... Resultado: False")
                 failed = True
                 break
 
             coreq_slots, coreq_turma = escolher_turma(coreq_data.get('horario', ''), temp_slots, coreq_horas)
-            resultado_alocacao = bool(coreq_slots)
-            if codigo == 'EPR0065':
-                print(f"Tentando alocar {coreq}... Resultado: {resultado_alocacao}")
-
             if not coreq_slots:
                 failed = True
                 break
@@ -309,15 +298,19 @@ def calcular_match_afinidade(texto_foco: str, dados: dict) -> int:
         str(dados.get('area', '')),
         str(dados.get('requisitos', '')),
         str(dados.get('corequisitos', ''))
-    ]).lower()
+    ])
 
     foco_tokens = set(re.findall(r'\b[a-z0-9]+\b', normalizar_texto(texto_foco)))
     doc_tokens = set(re.findall(r'\b[a-z0-9]+\b', normalizar_texto(documento)))
     if not foco_tokens or not doc_tokens:
         return 0
 
-    overlap = foco_tokens & doc_tokens
-    return min(100, int(len(overlap) / max(len(foco_tokens), 1) * 100))
+    intersection = foco_tokens & doc_tokens
+    union = foco_tokens | doc_tokens
+    if not union:
+        return 0
+
+    return int(len(intersection) / len(union) * 100)
 
 
 class RequisicaoGrade(BaseModel):

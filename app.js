@@ -344,9 +344,11 @@ function construirInterface() {
             card.className = `optativa-card card-vitrine ${m.area}`;
             card.setAttribute('data-area', m.area);
             card.setAttribute('data-trilha', m.area);
-            if (!cumpreRequisitos(m)) {
+            const bloqueado = !cumpreRequisitos(m);
+            if (bloqueado) {
                 card.classList.add('disciplina-bloqueada');
                 card.setAttribute('title', 'Pré-requisitos não cumpridos');
+                card.style.cursor = 'not-allowed';
             }
             card.innerHTML = `<div class="card-icone-watermark">${iconesAreas[m.area] || ''}</div><div style="display:flex; flex-direction:column;"><span class="card-codigo">${m.codigo}</span><span class="card-nome">${m.nome}</span></div><span style="font-size:0.75rem; background:rgba(255,255,255,0.1); padding:4px; border-radius:4px; width:fit-content; margin-top:8px;">${m.horas}h</span>`;
             card.onclick = () => { toggleCard(m.id); };
@@ -431,41 +433,29 @@ function _resolverCodigoReq(token) {
     return mapaIdsParaCodigos[upper] || mapaIdsParaCodigos[token] || upper;
 }
 
+function isPreRequisitoCumprido(requisitoString, historicoSet) {
+    if (!requisitoString || String(requisitoString).trim() === '') return true;
+
+    let texto = String(requisitoString).trim().toUpperCase();
+    texto = texto.replace(/\s+/g, ' ');
+
+    const opcoes = texto.split(/\s+OU\s+|\s+OR\s+|\||,|;/).map(item => item.trim()).filter(Boolean);
+    if (opcoes.length === 0) return true;
+
+    return opcoes.some(item => {
+        const conjuncoes = item.split(/\s+E\s+|\s+AND\s+|\+/).map(sub => sub.trim()).filter(Boolean);
+        return conjuncoes.every(sub => {
+            const cod = _resolverCodigoReq(sub);
+            return historicoSet.has(cod);
+        });
+    });
+}
+
 function requisitoAtendidoOficial(r, historico) {
     if (Array.isArray(r)) {
         return r.some(item => requisitoAtendidoOficial(item, historico));
     }
-
-    let reqLimpo = String(r).replace(/[()]/g, '').trim().toUpperCase();
-    reqLimpo = reqLimpo.replace(/\s+/g, ' ');
-    reqLimpo = reqLimpo.replace(/\s+E\s+/g, '+');
-    reqLimpo = reqLimpo.replace(/\s+OU\s+/g, '|');
-
-    if (reqLimpo.includes('|')) {
-        const opcoes = reqLimpo.split('|').map(opt => opt.trim());
-        return opcoes.some(opcao => {
-            if (opcao.includes('+')) {
-                const combo = opcao.split('+').map(sub => sub.trim());
-                return combo.every(subReq => {
-                    const cod = _resolverCodigoReq(subReq);
-                    return historico.has(cod);
-                });
-            }
-            const cod = _resolverCodigoReq(opcao);
-            return historico.has(cod);
-        });
-    }
-
-    if (reqLimpo.includes('+')) {
-        const combo = reqLimpo.split('+').map(sub => sub.trim());
-        return combo.every(subReq => {
-            const cod = _resolverCodigoReq(subReq);
-            return historico.has(cod);
-        });
-    }
-
-    const cod = _resolverCodigoReq(reqLimpo);
-    return historico.has(cod);
+    return isPreRequisitoCumprido(r, historico);
 }
 
 function cumpreRequisitos(m) {
@@ -484,8 +474,12 @@ function obterIdsDosCorequisitos(entry) {
     if (Array.isArray(entry)) return entry;
     let reqLimpo = String(entry).replace(/[()]/g, '').trim().toUpperCase();
     reqLimpo = reqLimpo.replace(/\s+/g, ' ');
-    reqLimpo = reqLimpo.replace(/\s+OU\s+/g, '|');
-    reqLimpo = reqLimpo.replace(/\s+E\s+/g, '+');
+    reqLimpo = reqLimpo.replace(/\bOU\b/g, '|');
+    reqLimpo = reqLimpo.replace(/\bOR\b/g, '|');
+    reqLimpo = reqLimpo.replace(/\bE\b/g, '+');
+    reqLimpo = reqLimpo.replace(/\bAND\b/g, '+');
+    reqLimpo = reqLimpo.replace(/,/g, '|');
+    reqLimpo = reqLimpo.replace(/;/g, '|');
 
     const obterIds = texto => {
         if (!texto) return [];
@@ -847,6 +841,8 @@ function atualizarInterface() {
         elementos.forEach(el => {
             el.classList.remove('concluido', 'planejado', 'bloqueado', 'alerta-coreq', 'destrancado-simulacao', 'coreq-glow', 'falta-corequisito');
             el.removeAttribute('data-tooltip');
+            el.style.cursor = '';
+            el.onclick = () => toggleCard(m.id);
 
             if (concluidas.has(m.id)) {
                 el.classList.add('concluido');
@@ -857,6 +853,7 @@ function atualizarInterface() {
                 el.setAttribute('data-tooltip', "Liberado pela simulação atual ✨");
             } else if (!reqOk) {
                 el.classList.add('bloqueado');
+                el.style.cursor = 'not-allowed';
                 const requisitosBrutos = Array.isArray(m.reqOficial)
                     ? m.reqOficial.map(req => Array.isArray(req) ? req.join(' + ') : req).join(' | ')
                     : String(m.reqOficial || '');
