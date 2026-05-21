@@ -2012,3 +2012,637 @@ if ('ontouchstart' in window) {
         }
     }, { passive: true });
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL DE IMPORTAÇÃO DE HISTÓRICO SIGAA (Client-Side / LGPD-Compliant)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Abre o modal de importação e reseta o estado visual.
+ */
+function abrirModalImportar() {
+    const overlay = document.getElementById('modal-importar');
+    if (!overlay) return;
+
+    // Reseta estado anterior
+    const textarea = document.getElementById('importar-textarea');
+    const resultado = document.getElementById('importar-resultado');
+    const footerDica = document.getElementById('importar-footer-dica');
+    const btnImportar = document.getElementById('btn-executar-importacao');
+
+    if (textarea) textarea.value = '';
+    if (resultado) { resultado.style.display = 'none'; resultado.className = 'importar-resultado'; resultado.innerHTML = ''; }
+    if (footerDica) footerDica.style.display = '';
+    if (btnImportar) btnImportar.disabled = false;
+
+    overlay.classList.add('ativo');
+
+    // Foca na textarea após a animação de abertura
+    setTimeout(() => { if (textarea) textarea.focus(); }, 320);
+
+    // Fecha ao clicar fora do painel
+    overlay.addEventListener('click', _importarFecharSeClicarFora, { once: true });
+}
+
+function _importarFecharSeClicarFora(e) {
+    const panel = document.querySelector('.importar-panel');
+    if (panel && !panel.contains(e.target)) {
+        fecharModalImportar();
+    } else {
+        // Rebinda o listener se não fechou
+        const overlay = document.getElementById('modal-importar');
+        if (overlay) overlay.addEventListener('click', _importarFecharSeClicarFora, { once: true });
+    }
+}
+
+/**
+ * Fecha o modal de importação.
+ */
+function fecharModalImportar() {
+    const overlay = document.getElementById('modal-importar');
+    if (!overlay) return;
+    overlay.classList.remove('ativo');
+    overlay.removeEventListener('click', _importarFecharSeClicarFora);
+}
+
+// Fecha também com Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const overlay = document.getElementById('modal-importar');
+        if (overlay && overlay.classList.contains('ativo')) fecharModalImportar();
+    }
+});
+
+/**
+ * NÚCLEO DA IMPORTAÇÃO: Extrai e integra o histórico colado do SIGAA.
+ *
+ * Estratégia Regex (linha-a-linha):
+ * 1. Detecta o padrão de código UnB: [A-Z]{3}\d{4}  (ex: EPR0001, MAT0025)
+ * 2. Na mesma linha, verifica a presença de "APR" ou "Aprovado"
+ *    para filtrar reprovações, trancamentos e cancelamentos.
+ * 3. Converte cada código aprovado para o ID interno do app e marca como concluído.
+ */
+function executarImportacaoSIGAA() {
+    const textarea = document.getElementById('importar-textarea');
+    const footerDica = document.getElementById('importar-footer-dica');
+    const btnImportar = document.getElementById('btn-executar-importacao');
+
+    if (!textarea) return;
+
+    const textoColado = textarea.value.trim();
+
+    if (!textoColado) {
+        _importarMostrarResultado('erro',
+            '⚠️ A caixa de texto está vazia. Cole o texto do seu Histórico Escolar do SIGAA e tente novamente.'
+        );
+        return;
+    }
+
+    const resultado = _processarTextoHistorico(textoColado);
+
+    if (resultado.codigosAprovados.size === 0) {
+        _importarMostrarResultado('aviso',
+            '🔍 Nenhuma disciplina aprovada foi encontrada no texto colado.<br>' +
+            '<small style="color:#aaa; margin-top:6px; display:block;">Verifique se copiou a página correta: ' +
+            '<em>Portal do Discente → Ensino → Emitir Histórico</em>.</small>'
+        );
+        return;
+    }
+
+    const html = _montarHtmlResultado(resultado);
+    const tipo = resultado.novos.length > 0 ? 'sucesso' : (resultado.codigosAprovados.size > 0 ? 'aviso' : 'erro');
+    _importarMostrarResultado(tipo, html);
+
+    if (resultado.novos.length > 0) {
+        if (footerDica) footerDica.style.display = 'none';
+        if (btnImportar) { btnImportar.disabled = true; btnImportar.textContent = '✅ Importado!'; }
+        if (resultado.codigosDesconhecidos.length === 0 && resultado.jaExistentes.length === 0) {
+            setTimeout(() => fecharModalImportar(), 2800);
+        }
+    }
+}
+
+/**
+ * Exibe a área de resultado do modal com a classe de estilo correta.
+ * @param {'sucesso'|'erro'|'aviso'} tipo
+ * @param {string} htmlConteudo
+ */
+function _importarMostrarResultado(tipo, htmlConteudo) {
+    const el = document.getElementById('importar-resultado');
+    const texto = document.getElementById('importar-resultado-texto');
+    if (!el || !texto) return;
+    el.style.display = 'block';
+    el.className = `importar-resultado ${tipo}`;
+    texto.innerHTML = htmlConteudo;
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NÚCLEO COMPARTILHADO: Regex de Extração de Disciplinas (usado por ambos modais)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Processa um bloco de texto extraído do SIGAA (seja de PDF ou de Ctrl+A/Ctrl+C)
+ * e identifica disciplinas aprovadas, integrando-as ao estado do app.
+ *
+ * @param {string} textoCompleto - Texto bruto do histórico
+ * @returns {{ codigosAprovados: Set, novos: Array, jaExistentes: Array, codigosDesconhecidos: Array }}
+ */
+function _processarTextoHistorico(textoCompleto) {
+    // Padrão UnB: 3 letras maiúsculas + 4 dígitos
+    const REGEX_CODIGO_UNB = /\b([A-Z]{3}\d{4})\b/g;
+    // Status de aprovação (APR, APROVADO, Aprovado) — ignora REP, TRANC, CANC, etc.
+    const REGEX_APROVADO   = /\b(APR|APROVADO|Aprovado)\b/i;
+
+    const linhas = textoCompleto.split('\n');
+    const codigosAprovados  = new Set();
+
+    linhas.forEach(linha => {
+        const matches = [...linha.matchAll(REGEX_CODIGO_UNB)].map(m => m[1]);
+        if (matches.length === 0) return;
+        if (REGEX_APROVADO.test(linha)) {
+            matches.forEach(cod => codigosAprovados.add(cod));
+        }
+    });
+
+    // Classifica em conhecidos (no catálogo EPR) e desconhecidos (outros cursos / ML)
+    const codigosConhecidos    = [];
+    const codigosDesconhecidos = [];
+
+    codigosAprovados.forEach(cod => {
+        const id = mapaCodigosParaIds[cod];
+        if (id) codigosConhecidos.push({ codigo: cod, id });
+        else     codigosDesconhecidos.push(cod);
+    });
+
+    const jaExistentes = codigosConhecidos.filter(({ id }) =>  concluidas.has(id));
+    const novos        = codigosConhecidos.filter(({ id }) => !concluidas.has(id));
+
+    // Integra ao estado global do app
+    novos.forEach(({ id }) => concluidas.add(id));
+    if (novos.length > 0) {
+        salvarDados();
+        atualizarInterface();
+    }
+
+    // ── AUTOMAÇÃO DE MÓDULO LIVRE ──
+    // Disciplinas fora do catálogo EPR são aproveitadas como carga do Módulo Livre.
+    // Cada disciplina vale 60h (média de 4 créditos). Limite removido para respeitar todos os créditos.
+    const HORAS_POR_DISCIPLINA_ML = 60;
+    let horasMLAdicionadas = 0;
+
+    if (codigosDesconhecidos.length > 0) {
+        const horasBrutas  = codigosDesconhecidos.length * HORAS_POR_DISCIPLINA_ML;
+        const unidades60 = codigosDesconhecidos.length; // 1 disciplina = 60h
+
+        if (unidades60 > 0) {
+            mlContadores[30] = mlContadores[30] || 0; // garante a chave
+            // Adiciona como grupos de 60h (2x30h cada)
+            const grupos60 = unidades60;
+            // Usa o contador de 60h se existir, senao distribui em 30h
+            if (mlContadores.hasOwnProperty('60')) {
+                mlContadores['60'] += grupos60;
+            } else {
+                mlContadores['30'] += grupos60 * 2;
+            }
+            horasMLAdicionadas = grupos60 * HORAS_POR_DISCIPLINA_ML;
+            salvarML();
+            atualizarSteppers();
+            atualizarInterface(); // recalcula % com o novo ML
+        }
+    }
+
+    return { codigosAprovados, novos, jaExistentes, codigosDesconhecidos, horasMLAdicionadas };
+}
+
+/**
+ * Monta o HTML de resultado formatado (compartilhado por ambos os modais).
+ * @param {{ novos, jaExistentes, codigosDesconhecidos }} resultado
+ * @returns {string} HTML formatado
+ */
+function _montarHtmlResultado({ novos, jaExistentes, codigosDesconhecidos }) {
+    let html = '';
+
+    if (novos.length > 0) {
+        const s = novos.length > 1;
+        html += `<strong style="color:#34d399;">✅ ${novos.length} disciplina${s?'s':''} importada${s?'s':''} com sucesso!</strong>`;
+        html += '<ul class="importar-resultado-lista">';
+        novos.forEach(({ codigo }) => {
+            const nome = mapaCodigosParaNomes[codigo] || '';
+            html += `<li title="${nome}">${codigo}${nome ? ' · ' + nome.substring(0, 22) + (nome.length > 22 ? '…' : '') : ''}</li>`;
+        });
+        html += '</ul>';
+    }
+
+    if (jaExistentes.length > 0) {
+        const s = jaExistentes.length > 1;
+        html += `<div style="margin-top:${novos.length > 0 ? '10px':'0'}; color:#6b7280; font-size:0.78rem;">
+            ℹ️ ${jaExistentes.length} disciplina${s?'s':''} já estava${s?'m':''} no histórico e foi${s?'ram':''} mantida${s?'s':''}.
+        </div>`;
+    }
+
+    if (codigosDesconhecidos.length > 0) {
+        const s = codigosDesconhecidos.length > 1;
+        html += `<div style="margin-top:8px; color:#9ca3af; font-size:0.76rem;">
+            ⚠️ ${codigosDesconhecidos.length} código${s?'s':''} aprovado${s?'s':''} fora do catálogo EPR/UnB
+            (outros cursos ou módulo livre):
+            <ul class="importar-resultado-lista" style="margin-top:5px;">
+                ${codigosDesconhecidos.map(c => `<li class="ignorado">${c}</li>`).join('')}
+            </ul>
+        </div>`;
+    }
+
+    return html;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL DE IMPORTAÇÃO VIA PDF (PDF.js / Client-Side / LGPD-Compliant)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Worker do PDF.js via CDN — configurado assim que o script carregar
+(function _configurarPDFjsWorker() {
+    // Aguarda o pdfjsLib estar disponível (carregado de forma síncrona no <head>)
+    if (typeof pdfjsLib !== 'undefined') {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+})();
+
+// Estado interno do modal PDF
+const _pdfState = {
+    arquivoSelecionado: null, // File object
+    processando: false,
+};
+
+/**
+ * Abre o modal de importação PDF e reseta o estado.
+ */
+function abrirModalPDF() {
+    const overlay = document.getElementById('modal-pdf');
+    if (!overlay) return;
+
+    // Reseta estado interno
+    _pdfState.arquivoSelecionado = null;
+    _pdfState.processando = false;
+
+    // Reseta UI da dropzone e resultado
+    _pdfResetarDropzone();
+    const resultado = document.getElementById('pdf-resultado');
+    if (resultado) { resultado.style.display = 'none'; resultado.className = 'pdf-resultado'; }
+    const btnProcessar = document.getElementById('btn-processar-pdf');
+    if (btnProcessar) { btnProcessar.disabled = true; btnProcessar.innerHTML = '&#128196; Processar PDF'; }
+    const fileInput = document.getElementById('pdf-input-file');
+    if (fileInput) fileInput.value = '';
+
+    // Restaura elementos que podem ter sido ocultados pelo estado de sucesso
+    const dz       = document.getElementById('pdf-dropzone');
+    const tutorial = document.getElementById('pdf-tutorial-bloco');
+    const lgpd     = document.getElementById('pdf-desc');
+    const footer   = document.querySelector('.pdf-footer');
+    const zonaOk   = document.getElementById('pdf-zona-sucesso');
+    const elML     = document.getElementById('pdf-sucesso-ml');
+
+    if (dz)       dz.style.display       = '';
+    if (tutorial) tutorial.style.display = '';
+    if (lgpd)     lgpd.style.display     = '';
+    if (footer)   footer.style.display   = '';
+    if (zonaOk)   { zonaOk.style.display = 'none'; zonaOk.style.opacity = ''; }
+    if (elML)     elML.style.display     = 'none';
+
+    overlay.classList.add('ativo');
+
+    // Fecha ao clicar fora do painel
+    overlay.addEventListener('click', _pdfFecharSeClicarFora, { once: true });
+}
+
+function _pdfFecharSeClicarFora(e) {
+    const panel = document.querySelector('.pdf-panel');
+    if (panel && !panel.contains(e.target)) {
+        fecharModalPDF();
+    } else {
+        const overlay = document.getElementById('modal-pdf');
+        if (overlay) overlay.addEventListener('click', _pdfFecharSeClicarFora, { once: true });
+    }
+}
+
+/**
+ * Fecha o modal PDF.
+ */
+function fecharModalPDF() {
+    if (_pdfState.processando) return; // Bloqueia fechamento durante o processamento
+    const overlay = document.getElementById('modal-pdf');
+    if (!overlay) return;
+    overlay.classList.remove('ativo');
+    overlay.removeEventListener('click', _pdfFecharSeClicarFora);
+}
+
+// Fecha com Escape (apenas se não estiver processando)
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const overlay = document.getElementById('modal-pdf');
+        if (overlay && overlay.classList.contains('ativo')) fecharModalPDF();
+    }
+});
+
+// ── Drag & Drop Handlers ──
+
+function _pdfDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (_pdfState.processando) return;
+    const dz = document.getElementById('pdf-dropzone');
+    if (dz) dz.classList.add('drag-over');
+    _pdfMostrarEstadoDZ('dragover');
+}
+
+function _pdfDragLeave(e) {
+    e.preventDefault();
+    const dz = document.getElementById('pdf-dropzone');
+    if (dz) dz.classList.remove('drag-over');
+    _pdfMostrarEstadoDZ(_pdfState.arquivoSelecionado ? 'selecionado' : 'idle');
+}
+
+function _pdfOnDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dz = document.getElementById('pdf-dropzone');
+    if (dz) dz.classList.remove('drag-over');
+
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        _pdfMostrarResultado('erro', '❌ Arquivo inválido. Por favor, selecione um arquivo <strong>.PDF</strong> emitido pelo SIGAA.');
+        _pdfMostrarEstadoDZ('idle');
+        return;
+    }
+
+    _pdfDefinirArquivo(file);
+}
+
+function _pdfOnFileInputChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    _pdfDefinirArquivo(file);
+}
+
+/**
+ * Registra o arquivo selecionado e atualiza a UI para o estado "selecionado".
+ */
+function _pdfDefinirArquivo(file) {
+    _pdfState.arquivoSelecionado = file;
+
+    const nomEl = document.getElementById('pdf-nome-arquivo');
+    if (nomEl) nomEl.textContent = file.name;
+
+    const dz = document.getElementById('pdf-dropzone');
+    if (dz) { dz.classList.remove('drag-over'); dz.classList.add('com-arquivo'); }
+
+    _pdfMostrarEstadoDZ('selecionado');
+
+    // Habilita o botão de processar
+    const btn = document.getElementById('btn-processar-pdf');
+    if (btn) btn.disabled = false;
+
+    // Limpa resultado anterior
+    const resultado = document.getElementById('pdf-resultado');
+    if (resultado) resultado.style.display = 'none';
+}
+
+/**
+ * Handler do botão "Processar PDF" — ponto de entrada do processamento.
+ */
+function _pdfProcessarArquivoSelecionado() {
+    if (!_pdfState.arquivoSelecionado || _pdfState.processando) return;
+
+    if (typeof pdfjsLib === 'undefined') {
+        _pdfMostrarResultado('erro',
+            '❌ A biblioteca PDF.js não foi carregada. Verifique a sua conexão e recarregue a página.'
+        );
+        return;
+    }
+
+    _pdfState.processando = true;
+    const btn = document.getElementById('btn-processar-pdf');
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Processando...'; }
+
+    const dz = document.getElementById('pdf-dropzone');
+    if (dz) { dz.classList.remove('com-arquivo'); dz.classList.add('carregando'); }
+
+    _pdfMostrarEstadoDZ('loading');
+    _pdfAtualizarProgresso('Lendo arquivo PDF...', 0, 'Iniciando...');
+
+    const reader = new FileReader();
+
+    reader.onload = async function(e) {
+        try {
+            const arrayBuffer = e.target.result;
+            const textoExtraido = await _pdfExtrairTexto(arrayBuffer);
+
+            _pdfAtualizarProgresso('Analisando disciplinas...', 100, 'Aplicando filtros...');
+
+            // Pequena pausa para o usuário ver 100%
+            await new Promise(r => setTimeout(r, 400));
+
+            // Processa o texto extraído com o core compartilhado
+            const resultado = _processarTextoHistorico(textoExtraido);
+
+            _pdfState.processando = false;
+            if (dz) dz.classList.remove('carregando');
+
+            if (resultado.codigosAprovados.size === 0) {
+                _pdfMostrarEstadoDZ('idle');
+                _pdfMostrarResultado('aviso',
+                    '🔍 Nenhuma disciplina com status <strong>APR / Aprovado</strong> foi encontrada neste PDF.<br>' +
+                    '<small style="color:#aaa; margin-top:6px; display:block;">Verifique se o PDF é o <em>Histórico Escolar</em> emitido pelo SIGAA (não o espelho de matrícula ou outro documento).</small>'
+                );
+                if (btn) { btn.disabled = false; btn.innerHTML = '&#128196; Tentar Novamente'; }
+                return;
+            }
+
+            // ══ ESTADO DE SUCESSO CELEBRATÓRIO ══
+            // Oculta dropzone, tutorial e LGPD — exibe a zona de celebração
+            if (resultado.novos.length > 0 || resultado.horasMLAdicionadas > 0) {
+                // Oculta elementos de upload
+                if (dz) dz.style.display = 'none';
+                const tutorial = document.getElementById('pdf-tutorial-bloco');
+                const lgpd     = document.getElementById('pdf-desc');
+                if (tutorial) tutorial.style.display = 'none';
+                if (lgpd)     lgpd.style.display     = 'none';
+
+                // Oculta footer de ações e rodapé padrão
+                const footer = document.querySelector('.pdf-footer');
+                if (footer) footer.style.display = 'none';
+
+                // Popula zona de sucesso
+                const totalCurriculo = resultado.novos.length + resultado.jaExistentes.length;
+                const elTitulo = document.getElementById('pdf-sucesso-titulo');
+                const elSub    = document.getElementById('pdf-sucesso-subtitulo');
+                const elML     = document.getElementById('pdf-sucesso-ml');
+                const elMLTxt  = document.getElementById('pdf-sucesso-ml-texto');
+                const zonaOk   = document.getElementById('pdf-zona-sucesso');
+
+                if (elTitulo) {
+                    elTitulo.textContent = 'Processamento Concluído!';
+                }
+
+                if (elSub) {
+                    elSub.innerHTML = `<strong>${totalCurriculo}</strong> disciplina${totalCurriculo !== 1 ? 's' : ''} do catálogo da Engenharia de Produção fora${totalCurriculo !== 1 ? 'm' : ''} ativada${totalCurriculo !== 1 ? 's' : ''}.`;
+                }
+
+                // Mensagem de ML transparente
+                if (resultado.horasMLAdicionadas > 0 && elML && elMLTxt) {
+                    const nDisc = resultado.codigosDesconhecidos.length;
+                    
+                    let htmlTags = '<div class="pdf-tags-ml">';
+                    resultado.codigosDesconhecidos.forEach(cod => {
+                        htmlTags += `<span class="pdf-tag-ml">${cod}</span>`;
+                    });
+                    htmlTags += '</div>';
+
+                    elMLTxt.innerHTML =
+                        `⚠️ Encontrámos <strong>${nDisc} disciplina${nDisc > 1 ? 's' : ''}</strong> ` +
+                        `fora do catálogo padrão. Ela${nDisc > 1 ? 's' : ''} fora${nDisc > 1 ? 'm' : ''} convertida${nDisc > 1 ? 's' : ''} ` +
+                        `em <strong>${resultado.horasMLAdicionadas} horas de Módulo Livre</strong>:<br>${htmlTags}`;
+                    elML.style.display = 'flex';
+                }
+
+                if (zonaOk) {
+                    zonaOk.style.display = 'flex';
+                    // Animação de entrada
+                    zonaOk.style.opacity = '0';
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => { zonaOk.style.opacity = '1'; });
+                    });
+                }
+
+            } else {
+                // Nenhuma novidade — mostra resultado compacto sem ocultar a dropzone
+                const html = _montarHtmlResultado(resultado);
+                _pdfMostrarEstadoDZ('selecionado');
+                _pdfMostrarResultado('aviso', html);
+                if (btn) { btn.disabled = false; btn.innerHTML = '&#128196; Processar PDF'; }
+            }
+
+        } catch (err) {
+            _pdfState.processando = false;
+            if (dz) dz.classList.remove('carregando');
+            _pdfMostrarEstadoDZ('idle');
+            console.error('[PDF Import] Erro ao processar PDF:', err);
+            _pdfMostrarResultado('erro',
+                `❌ Erro ao ler o PDF: <em>${err.message || 'Falha desconhecida'}</em>.<br>` +
+                '<small style="color:#aaa; margin-top:6px; display:block;">Tente gerar o PDF novamente pelo SIGAA ou use o método alternativo de colar o texto.</small>'
+            );
+            if (btn) { btn.disabled = false; btn.innerHTML = '&#128196; Tentar Novamente'; }
+        }
+    };
+
+    reader.onerror = function() {
+        _pdfState.processando = false;
+        _pdfMostrarEstadoDZ('idle');
+        _pdfMostrarResultado('erro', '❌ Não foi possível ler o arquivo. Tente novamente.');
+        if (btn) { btn.disabled = false; btn.innerHTML = '&#128196; Tentar Novamente'; }
+    };
+
+    reader.readAsArrayBuffer(_pdfState.arquivoSelecionado);
+}
+
+/**
+ * Extrai todo o texto do PDF usando PDF.js, agrupando itens por coordenada Y
+ * para reconstruir linhas reais (fundamental para PDFs com layout tabular do SIGAA).
+ *
+ * @param {ArrayBuffer} arrayBuffer - Conteúdo binário do PDF
+ * @returns {Promise<string>} - Texto completo com linhas separadas por \n
+ */
+async function _pdfExtrairTexto(arrayBuffer) {
+    const TOLERANCIA_Y = 2; // pixels de tolerância para agrupar na mesma linha
+
+    const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const totalPaginas = pdfDoc.numPages;
+    const linhasGlobais = [];
+
+    for (let pageNum = 1; pageNum <= totalPaginas; pageNum++) {
+        const progresso = ((pageNum - 1) / totalPaginas) * 90; // 0–90% para extração
+        _pdfAtualizarProgresso(
+            `Extraindo texto... (pág. ${pageNum}/${totalPaginas})`,
+            progresso,
+            `Página ${pageNum} de ${totalPaginas}`
+        );
+
+        const page = await pdfDoc.getPage(pageNum);
+        const textContent = await page.getTextContent();
+
+        // Agrupa itens de texto pela coordenada Y (mesma linha no documento)
+        const grupos = new Map(); // key: Y arredondado → value: array de {x, str}
+
+        textContent.items.forEach(item => {
+            if (!item.str || !item.str.trim()) return;
+            const y = Math.round(item.transform[5] / TOLERANCIA_Y) * TOLERANCIA_Y;
+            const x = item.transform[4];
+            if (!grupos.has(y)) grupos.set(y, []);
+            grupos.get(y).push({ x, str: item.str });
+        });
+
+        // Ordena por Y decrescente (topo → base do PDF) e por X crescente (esq → dir)
+        const ysOrdenados = [...grupos.keys()].sort((a, b) => b - a);
+        ysOrdenados.forEach(y => {
+            const itens = grupos.get(y).sort((a, b) => a.x - b.x);
+            linhasGlobais.push(itens.map(i => i.str).join(' '));
+        });
+
+        linhasGlobais.push(''); // Separador entre páginas
+    }
+
+    return linhasGlobais.join('\n');
+}
+
+// ── Helpers de UI do Modal PDF ──
+
+/**
+ * Alterna qual estado da drop zone está visível.
+ * @param {'idle'|'dragover'|'loading'|'selecionado'} estado
+ */
+function _pdfMostrarEstadoDZ(estado) {
+    const estados = { idle: 'pdf-dz-idle', dragover: 'pdf-dz-dragover', loading: 'pdf-dz-loading', selecionado: 'pdf-dz-selecionado' };
+    Object.entries(estados).forEach(([key, id]) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = key === estado ? 'flex' : 'none';
+    });
+}
+
+/**
+ * Atualiza a mensagem e barra de progresso na drop zone de loading.
+ */
+function _pdfAtualizarProgresso(msg, percentual, sub) {
+    const msgEl  = document.getElementById('pdf-loading-msg');
+    const barEl  = document.getElementById('pdf-progress-bar');
+    const subEl  = document.getElementById('pdf-loading-sub');
+    if (msgEl) msgEl.textContent = msg;
+    if (barEl) barEl.style.width = Math.min(100, Math.round(percentual)) + '%';
+    if (subEl && sub !== undefined) subEl.textContent = sub;
+}
+
+/**
+ * Reseta a drop zone para o estado inicial (idle).
+ */
+function _pdfResetarDropzone() {
+    const dz = document.getElementById('pdf-dropzone');
+    if (dz) { dz.className = 'pdf-dropzone'; }
+    _pdfMostrarEstadoDZ('idle');
+}
+
+/**
+ * Exibe a área de resultado do modal PDF.
+ * @param {'sucesso'|'erro'|'aviso'} tipo
+ * @param {string} htmlConteudo
+ */
+function _pdfMostrarResultado(tipo, htmlConteudo) {
+    const el    = document.getElementById('pdf-resultado');
+    const texto = document.getElementById('pdf-resultado-texto');
+    if (!el || !texto) return;
+    el.style.display = 'block';
+    el.className = `pdf-resultado ${tipo}`;
+    texto.innerHTML = htmlConteudo;
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}

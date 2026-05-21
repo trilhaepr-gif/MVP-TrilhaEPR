@@ -7,6 +7,8 @@
     <title>Trilha EPR - Simulador de Fluxograma</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- PDF.js — Leitura de PDF 100% Client-Side (LGPD-Compliant) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
     <!-- ========================================== -->
     <!-- ZONA 1: ESTILOS E ANIMAÇÕES (CSS)        -->
@@ -56,11 +58,13 @@
                         <button onclick="mudarSemestre(1)">+</button>
                     </div>
                     <div class="botoes-acao">
+                        <button id="btn-abrir-importar" class="btn-importar-sigaa" onclick="abrirModalPDF()" title="Importar histórico do SIGAA (PDF)">
+                            <span>&#128196;</span> Importar SIGAA
+                        </button>
                         <button id="btn-abrir-dashboard" onclick="abrirDashboardOverlay()" title="Ver Análise do Perfil">
                             <span class="dash-btn-icon">&#128202;</span> Perfil Analítico
                         </button>
-                        <button class="btn-simular" id="btn-modo-sim" onclick="toggleModoSimulacao()">✨ Simular com
-                            IA</button>
+                        <button class="btn-simular" id="btn-modo-sim" onclick="toggleModoSimulacao()">✨ Simular com IA</button>
                         <button class="btn-reset" onclick="limparProgresso()">Zerar</button>
                     </div>
                 </div>
@@ -424,7 +428,240 @@
     <script src="app.js" defer></script>
     <!-- Tooltip Global -->
     <div id="custom-tooltip"></div>
-    
+
+    <!-- ══════════════════════════════════════════════════════════════════ -->
+    <!-- ZONA: MODAL DE IMPORTAÇÃO DE HISTÓRICO (SIGAA / LGPD-COMPLIANT)  -->
+    <!-- ══════════════════════════════════════════════════════════════════ -->
+    <div id="modal-importar" class="importar-overlay" role="dialog" aria-modal="true" aria-labelledby="importar-titulo" aria-describedby="importar-desc">
+        <div class="importar-panel">
+
+            <!-- CABEÇALHO DO MODAL -->
+            <div class="importar-header">
+                <div class="importar-header-esq">
+                    <div class="importar-icone-titulo">&#128190;</div>
+                    <div>
+                        <h2 id="importar-titulo" class="importar-titulo">Importar Histórico do SIGAA</h2>
+                        <p class="importar-subtitulo">Detecção automática de disciplinas aprovadas</p>
+                    </div>
+                </div>
+                <button class="importar-btn-fechar" onclick="fecharModalImportar()" title="Fechar" aria-label="Fechar modal">&times;</button>
+            </div>
+
+            <!-- CORPO DO MODAL -->
+            <div class="importar-body">
+
+                <!-- TUTORIAL PASSO A PASSO -->
+                <div class="importar-tutorial">
+                    <div class="importar-tutorial-titulo">&#128218; Como importar em 3 passos</div>
+                    <div class="importar-passos">
+                        <div class="importar-passo">
+                            <div class="importar-passo-num">1</div>
+                            <div class="importar-passo-texto">
+                                <strong>Abra o SIGAA</strong> e navegue até
+                                <em>Portal do Discente → Ensino → Consultar Histórico</em>.
+                            </div>
+                        </div>
+                        <div class="importar-passo">
+                            <div class="importar-passo-num">2</div>
+                            <div class="importar-passo-texto">
+                                Pressione <kbd>Ctrl</kbd> + <kbd>A</kbd> para selecionar toda a página,
+                                depois <kbd>Ctrl</kbd> + <kbd>C</kbd> para copiar.
+                            </div>
+                        </div>
+                        <div class="importar-passo">
+                            <div class="importar-passo-num">3</div>
+                            <div class="importar-passo-texto">
+                                Cole o conteúdo na caixa abaixo com <kbd>Ctrl</kbd> + <kbd>V</kbd>
+                                e clique em <strong>Importar Disciplinas</strong>.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AVISO DE PRIVACIDADE (LGPD) -->
+                <div class="importar-lgpd">
+                    <span class="importar-lgpd-icone">&#128274;</span>
+                    <div id="importar-desc" class="importar-lgpd-texto">
+                        <strong>Privacidade Garantida (LGPD):</strong> O Trilha EPR processa os dados
+                        <em>localmente no seu navegador</em>. Nenhuma informação pessoal, nota ou
+                        matrícula é enviada aos nossos servidores.
+                    </div>
+                </div>
+
+                <!-- ÁREA DE COLA -->
+                <div class="importar-textarea-wrapper">
+                    <label for="importar-textarea" class="importar-label">
+                        &#128196; Cole o texto do seu Histórico Escolar aqui:
+                    </label>
+                    <textarea
+                        id="importar-textarea"
+                        class="importar-textarea"
+                        placeholder="Cole aqui o texto copiado do SIGAA (Ctrl+V)...
+
+O sistema irá encontrar automaticamente todos os códigos de disciplinas que você foi Aprovado(a)."
+                        spellcheck="false"
+                        autocomplete="off"
+                    ></textarea>
+                </div>
+
+                <!-- ÁREA DE RESULTADO (aparece após processar) -->
+                <div id="importar-resultado" class="importar-resultado" style="display:none;">
+                    <div id="importar-resultado-texto"></div>
+                </div>
+
+            </div><!-- /importar-body -->
+
+            <!-- RODAPÉ COM BOTÕES -->
+            <div class="importar-footer">
+                <div class="importar-footer-dica" id="importar-footer-dica">
+                    &#9432; Somente disciplinas com status <strong>APR</strong> ou <strong>Aprovado</strong> serão importadas.
+                </div>
+                <div class="importar-footer-botoes">
+                    <button class="importar-btn-cancelar" onclick="fecharModalImportar()">Cancelar</button>
+                    <button class="importar-btn-importar" id="btn-executar-importacao" onclick="executarImportacaoSIGAA()">
+                        &#128190; Importar Disciplinas
+                    </button>
+                </div>
+            </div>
+
+        </div><!-- /importar-panel -->
+    </div><!-- /modal-importar -->
+
+    <!-- ══════════════════════════════════════════════════════════════════ -->
+    <!-- ZONA: MODAL DE IMPORTAÇÃO VIA PDF (PDF.js / LGPD-Compliant)      -->
+    <!-- ══════════════════════════════════════════════════════════════════ -->
+    <div id="modal-pdf" class="pdf-overlay" role="dialog" aria-modal="true" aria-labelledby="pdf-titulo" aria-describedby="pdf-desc">
+        <div class="pdf-panel">
+
+            <!-- CABEÇALHO -->
+            <div class="pdf-header">
+                <div class="pdf-header-esq">
+                    <div class="pdf-icone-titulo">&#128196;</div>
+                    <div>
+                        <h2 id="pdf-titulo" class="pdf-titulo">Importar Histórico Escolar</h2>
+                        <p class="pdf-subtitulo">Upload do PDF emitido pelo SIGAA · 100% local</p>
+                    </div>
+                </div>
+                <button class="pdf-btn-fechar" onclick="fecharModalPDF()" title="Fechar" aria-label="Fechar modal">&times;</button>
+            </div>
+
+            <!-- CORPO -->
+            <div class="pdf-body">
+
+                <!-- TUTORIAL -->
+                <div class="pdf-tutorial" id="pdf-tutorial-bloco">
+                    <div class="pdf-tutorial-titulo">&#128218; Como obter o PDF em 2 passos</div>
+                    <div class="pdf-passos">
+                        <div class="pdf-passo">
+                            <div class="pdf-passo-num">1</div>
+                            <div class="pdf-passo-texto">
+                                No <strong>SIGAA</strong>, acesse <em>Ensino &rarr; Emitir Hist&oacute;rico</em> e clique em <strong>Emitir</strong>. Quando o PDF abrir no navegador, salve-o no seu computador (<kbd>Ctrl</kbd>+<kbd>S</kbd>).
+                            </div>
+                        </div>
+                        <div class="pdf-passo">
+                            <div class="pdf-passo-num">2</div>
+                            <div class="pdf-passo-texto">
+                                Clique na área abaixo ou <strong>arraste o arquivo PDF</strong> diretamente para esta janela e clique em <strong>Processar PDF</strong>.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AVISO LGPD -->
+                <div class="pdf-lgpd" id="pdf-desc">
+                    <span class="pdf-lgpd-icone">&#128274;</span>
+                    <div class="pdf-lgpd-texto">
+                        <strong>Privacidade Garantida (LGPD):</strong> O processamento deste arquivo é feito
+                        <em>localmente no seu navegador</em>. Seu histórico <strong>nunca sai do seu computador</strong>
+                        e nenhum dado é enviado para os nossos servidores.
+                    </div>
+                </div>
+
+                <!-- INPUT FILE OCULTO -->
+                <input type="file" id="pdf-input-file" accept=".pdf,application/pdf" style="display:none;" onchange="_pdfOnFileInputChange(event)">
+
+                <!-- DROP ZONE -->
+                <div class="pdf-dropzone" id="pdf-dropzone"
+                    onclick="document.getElementById('pdf-input-file').click()"
+                    ondragover="_pdfDragOver(event)"
+                    ondragleave="_pdfDragLeave(event)"
+                    ondrop="_pdfOnDrop(event)"
+                    role="button"
+                    tabindex="0"
+                    aria-label="Clique ou arraste um PDF aqui"
+                    onkeydown="if(event.key==='Enter'||event.key===' ')document.getElementById('pdf-input-file').click()">
+
+                    <!-- Estado: Idle -->
+                    <div class="pdf-dz-idle" id="pdf-dz-idle">
+                        <div class="pdf-dz-icone">&#128196;</div>
+                        <div class="pdf-dz-titulo">Arraste o PDF aqui</div>
+                        <div class="pdf-dz-sub">ou clique para selecionar o arquivo</div>
+                        <div class="pdf-dz-badge">.PDF</div>
+                    </div>
+
+                    <!-- Estado: Drag Over -->
+                    <div class="pdf-dz-dragover" id="pdf-dz-dragover" style="display:none;">
+                        <div class="pdf-dz-icone" style="animation: pdfPulse 0.6s ease infinite alternate;">&#128229;</div>
+                        <div class="pdf-dz-titulo">Solte para processar!</div>
+                    </div>
+
+                    <!-- Estado: Loading -->
+                    <div class="pdf-dz-loading" id="pdf-dz-loading" style="display:none;">
+                        <div class="pdf-spinner"></div>
+                        <div class="pdf-dz-titulo" id="pdf-loading-msg">Lendo PDF...</div>
+                        <div class="pdf-progress-bar-outer">
+                            <div class="pdf-progress-bar-inner" id="pdf-progress-bar" style="width:0%"></div>
+                        </div>
+                        <div class="pdf-dz-sub" id="pdf-loading-sub">Processando páginas...</div>
+                    </div>
+
+                    <!-- Estado: Arquivo Selecionado (preview) -->
+                    <div class="pdf-dz-selecionado" id="pdf-dz-selecionado" style="display:none;">
+                        <div class="pdf-dz-icone" style="color: #34d399;">&#9989;</div>
+                        <div class="pdf-dz-titulo" id="pdf-nome-arquivo">arquivo.pdf</div>
+                        <div class="pdf-dz-sub">Arquivo pronto. Clique em "Processar PDF" para continuar.</div>
+                    </div>
+                </div>
+
+                <!-- ÁREA DE RESULTADO -->
+                <div id="pdf-resultado" class="pdf-resultado" style="display:none;">
+                    <div id="pdf-resultado-texto"></div>
+                </div>
+
+                <!-- ZONA DE SUCESSO CELEBRATÓRIO (aparece após importação bem-sucedida) -->
+                <div id="pdf-zona-sucesso" class="pdf-zona-sucesso" style="display:none;">
+                    <div class="pdf-sucesso-confete">&#127881;</div>
+                    <div class="pdf-sucesso-titulo" id="pdf-sucesso-titulo">Histórico importado!</div>
+                    <div class="pdf-sucesso-subtitulo" id="pdf-sucesso-subtitulo"></div>
+                    <div class="pdf-sucesso-ml" id="pdf-sucesso-ml" style="display:none;">
+                        <div class="pdf-sucesso-ml-icone">&#128218;</div>
+                        <div class="pdf-sucesso-ml-texto" id="pdf-sucesso-ml-texto"></div>
+                    </div>
+                    <button class="pdf-btn-concluir" onclick="fecharModalPDF()">
+                        &#10003; Concluir e Ver Grade
+                    </button>
+                </div>
+
+            </div><!-- /pdf-body -->
+
+            <!-- RODAPÉ -->
+            <div class="pdf-footer">
+                <div class="pdf-footer-esq">
+                    <button class="pdf-btn-texto" onclick="fecharModalPDF(); abrirModalImportar();" title="Usar o método de colar texto">
+                        &#9997; Prefiro colar o texto
+                    </button>
+                </div>
+                <div class="pdf-footer-dir">
+                    <button class="pdf-btn-cancelar" onclick="fecharModalPDF()">Cancelar</button>
+                    <button class="pdf-btn-processar" id="btn-processar-pdf" onclick="_pdfProcessarArquivoSelecionado()" disabled>
+                        &#128196; Processar PDF
+                    </button>
+                </div>
+            </div>
+
+        </div><!-- /pdf-panel -->
+    </div><!-- /modal-pdf -->
+
 </body>
 
 </html>
